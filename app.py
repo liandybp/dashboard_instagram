@@ -14,6 +14,7 @@ load_dotenv(override=True)
 # Import our custom modules
 import refresh
 from idea_filters import is_substantive_comment
+import ideas
 
 # Define ID stripping patterns
 _ID_PATTERN_LONG = re.compile(r"\b(post|comment|message)[\s_-]?id[:\s]*\d+\b", re.IGNORECASE)
@@ -371,4 +372,58 @@ with tab6:
 # Tab 7 - Ideas
 with tab7:
     st.subheader("💡 Sistema de Ideas")
-    st.write("Sistema de ideas — Fase 8")
+    
+    # Platform selector for idea generation
+    platform = st.radio("Plataforma:", ["Instagram", "YouTube"], horizontal=True)
+    
+    # Generate all ideas button
+    if st.button(f"Generar todas las ideas de {platform}"):
+        with st.spinner(f"Generando ideas para {platform.lower()}..."):
+            try:
+                if platform == "Instagram":
+                    ideas_list = ideas.generate_all_ideas_ig()
+                else:
+                    ideas_list = ideas.generate_all_ideas_yt()
+                
+                st.success("Ideas generadas con éxito!")
+                # Store ideas in session state
+                st.session_state['generated_ideas'] = ideas_list
+            except Exception as e:
+                st.error(f"Error al generar ideas: {str(e)}")
+    
+    # Display ideas by bucket if they exist
+    if 'generated_ideas' in st.session_state:
+        ideas_data = st.session_state['generated_ideas']
+        
+        # Categorize ideas by bucket
+        ideas_by_bucket = {}
+        for idea in ideas_data:
+            bucket = idea.get('bucket', 'comments')
+            if bucket not in ideas_by_bucket:
+                ideas_by_bucket[bucket] = []
+            ideas_by_bucket[bucket].append(idea)
+        
+        buckets = ["comments", "dms", "top_content"]
+        for bucket in buckets:
+            if bucket in ideas_by_bucket:
+                with st.expander(f"De {bucket} — {len(ideas_by_bucket[bucket])} ideas"):
+                    for idea in ideas_by_bucket[bucket]:
+                        st.markdown(f"**{idea['angle']}**")
+                        st.markdown("> " + "\n> ".join(idea['evidence_quotes']))
+                        st.markdown(f"**Por qué es buena idea:** {idea['why_good_idea']}")
+                        st.markdown(f"**Ángulo sugerido:** {idea['suggested_angle']}")
+                        
+                        # Discard button with modal
+                        if st.button(f"✕ Descartar", key=f"discard_{idea['id']}"):
+                            # Show discard modal
+                            with st.expander("Descartar idea"):
+                                reason_quick = st.radio(
+                                    "Razón rápida:",
+                                    ["Tema cubierto", "No me interesa", "Muy básica", "No es mi estilo", "Otro"]
+                                )
+                                reason_text = st.text_area("Descripción detallada:")
+                                if st.button("Confirmar descarte"):
+                                    ideas.discard_idea(idea['id'], reason_quick, reason_text)
+                                    st.success(f"Idea descartada: {idea['angle']}")
+    else:
+        st.info("Haz clic en 'Generar todas las ideas' para comenzar.")
