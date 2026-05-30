@@ -1,94 +1,26 @@
-# Patrones para ADORATION_PATTERNS
+# Patrones para ADORATION_PATTERNS - more comprehensive list with word boundaries to avoid false positives
+# Note: These patterns are intentionally kept broad but with word boundaries to catch clear adoration
 ADORATION_PATTERNS = [
-    r"amazing",
-    r"beautiful",
-    r"gorgeous",
-    r"incredible",
-    r"inspiring",
-    r"love",
-    r"lovely",
-    r"marvelous",
-    r"phenomenal",
-    r"perfect",
-    r"stunning",
-    r"wonderful",
-    r"excellent",
-    r"fantastic",
-    r"great",
-    r"superb",
-    r"brilliant",
-    r"outstanding",
-    r"amazingly",
-    r"incredibly",
-    r"absolutely",
-    r"totally",
-    r"so good",
-    r"so beautiful",
-    r"so amazing",
-    r"so wonderful",
-    r"so perfect",
-    r"so great",
-    r"so incredible",
-    r"so brilliant",
-    r"so outstanding",
-    r"so fantastic",
-    r"so excellent",
-    r"so marvelous",
-    r"so lovely",
-    r"so stunning",
-    r"so inspiring",
-    r"so amazing",
-    r"so perfect",
-    r"so good",
-    r"so beautiful",
-    r"so wonderful",
-    r"so great",
-    r"so incredible",
-    r"so brilliant",
-    r"so outstanding",
-    r"so fantastic",
-    r"so excellent",
-    r"so marvelous",
-    r"so lovely",
-    r"so stunning",
-    r"so inspiring",
-    r"so amazing",
-    r"so perfect",
-    r"so good",
-    r"so beautiful",
-    r"so wonderful",
-    r"so great",
-    r"so incredible",
-    r"so brilliant",
-    r"so outstanding",
-    r"so fantastic",
-    r"so excellent",
-    r"so marvelous",
-    r"so lovely",
-    r"so stunning",
-    r"so inspiring",
+    r"\b(amazing|beautiful|gorgeous|incredible|inspiring|love|lovely|marvelous|phenomenal|perfect|stunning|wonderful|excellent|fantastic|great|superb|brilliant|outstanding)\b",
+    r"\b(adoro|amo|me encanta|me gusta|genial|fantástico|maravilloso|perfecto|excelente)\b",
 ]
 
-# Patrones para BOT_PATTERNS
+# Patrones para BOT_PATTERNS - more comprehensive list
 BOT_PATTERNS = [
     r"follow me",
     r"follow back",
     r"follow for follow",
     r"follow for follows",
-    r"follow for f",
     r"followers",
     r"following",
     r"like for like",
     r"like for likes",
-    r"like for l",
     r"likes",
     r"love for love",
     r"love for loves",
-    r"love for l",
     r"loves",
     r"comment for comment",
     r"comment for comments",
-    r"comment for c",
     r"comments",
     r"tag a friend",
     r"tag someone",
@@ -138,8 +70,6 @@ BOT_PATTERNS = [
     r"exclusive offer",
     r"secret deal",
     r"special offer",
-    r"flash sale",
-    r"deal of the day",
     r"hot deal",
     r"best deal",
     r"top deal",
@@ -223,37 +153,7 @@ BOT_PATTERNS = [
     r"love this so much",
     r"love that so much",
     r"love these so much",
-    r"love those so much",
-    r"love it so much",
-    r"love this so much",
-    r"love that so much",
-    r"love these so much",
-    r"love those so much",
-    r"love it so much",
-    r"love this so much",
-    r"love that so much",
-    r"love these so much",
-    r"love those so much",
-    r"love it so much",
-    r"love this so much",
-    r"love that so much",
-    r"love these so much",
-    r"love those so much",
-    r"love it so much",
-    r"love this so much",
-    r"love that so much",
-    r"love these so much",
-    r"love those so much",
-    r"love it so much",
-    r"love this so much",
-    r"love that so much",
-    r"love these so much",
-    r"love those so much",
-    r"love it so much",
-    r"love this so much",
-    r"love that so much",
-    r"love these so much",
-    r"love those so much",
+    r"love those so much"
 ]
 
 import re
@@ -265,7 +165,65 @@ def is_substantive_comment(comment_text):
     # Convert to lowercase for case-insensitive matching
     text = comment_text.lower()
     
-    # Check for adoration patterns
+    # Check for very short or emoji-only comments that are likely spam/bots
+    # Remove all non-alphabetic characters and check if it's mostly emojis
+    emoji_only = re.sub(r'[^\U0001F600-\U0001F64F\U0001F300-\U0001F5FF\U0001F680-\U0001F6FF\U0001F1E0-\U0001F1FF]', '', text)
+    letter_only = re.sub(r'[^a-zA-Záéíóúñü]', '', text)
+    
+    # If more than 70% of the characters are emojis, filter it out
+    if len(text) > 0 and len(emoji_only) / len(text) > 0.7:
+        return False
+    
+# Check for very short or emoji-only comments that are likely spam/bots
+    # Remove all non-alphabetic characters and check if it's mostly emojis
+    emoji_only = re.sub(r'[^\U0001F600-\U0001F64F\U0001F300-\U0001F5FF\U0001F680-\U0001F6FF\U0001F1E0-\U0001F1FF]', '', text)
+    letter_only = re.sub(r'[^a-zA-Záéíóúñü]', '', text)
+    
+    # If more than 70% of the characters are emojis, filter it out
+    if len(text) > 0 and len(emoji_only) / len(text) > 0.7:
+        return False
+    
+    # Check for repeating character patterns (e.g., 'jjjj', 'aaaa')
+    # Look for 4 or more consecutive identical characters
+    if re.search(r'(.)\1{3,}', text):
+        return False
+    
+    # Special case: check for alternating character patterns that are spam-like
+    # Like jajajaja where there's a repeating pattern of 2 chars that repeats 4 times
+    if len(text) >= 8:
+        # Check if the pattern repeats (e.g., 'jajajaja' = 'ja' repeated 4 times)
+        for pattern_len in range(1, min(len(text)//2 + 1, 5)):
+            pattern = text[:pattern_len]
+            if len(pattern) > 0 and len(text) >= pattern_len * 4:
+                # Check if this pattern repeats throughout
+                full_pattern = (pattern * (len(text) // len(pattern)) + 
+                              pattern[:len(text) % len(pattern)])
+                if full_pattern == text:
+                    return False
+    
+    # Check for very short comments (3 characters or less)
+    clean_text = re.sub(r'[^a-zA-Záéíóúñü]', ' ', text)
+    clean_text = re.sub(r'\s+', ' ', clean_text).strip()
+    
+    if len(clean_text) < 3:
+        return False
+    
+    # Also check for very short repeated patterns that might be spam (like jajajaja)
+    # Check if the string is mostly made of repeating patterns
+    clean_text = re.sub(r'[^a-zA-Z0-9áéíóúñü]', '', text)
+    if len(clean_text) > 4:
+        # Look for simple repeating patterns like "ababab"
+        pattern_length = min(3, len(clean_text) // 2)
+        for i in range(1, pattern_length + 1):
+            pattern = clean_text[:i]
+            if len(pattern) > 0 and len(clean_text) >= 4 * len(pattern):
+                # Check if the pattern repeats throughout
+                if pattern * (len(clean_text) // len(pattern)) == clean_text[:len(pattern) * (len(clean_text) // len(pattern))]:
+                    # Only filter if it's clearly spam-like (more than 3 repetitions)
+                    if len(clean_text) // len(pattern) >= 4:
+                        return False
+    
+    # Check for adoration patterns with word boundaries to avoid false positives
     adoration_match = any(re.search(pattern, text) for pattern in ADORATION_PATTERNS)
     
     if adoration_match:
@@ -277,7 +235,14 @@ def is_substantive_comment(comment_text):
     if bot_match:
         return False  # It's a bot message, not substantive
     
-    # If it doesn't match either category, consider it substantive
+    # Check for very short comments (3 characters or less)
+    clean_text = re.sub(r'[^a-zA-Záéíóúñü]', ' ', text)
+    clean_text = re.sub(r'\s+', ' ', clean_text).strip()
+    
+    if len(clean_text) < 3:
+        return False
+    
+    # If it doesn't match any filtering criteria, consider it substantive
     return True
 
 def is_substantive_dm(dm_text):
@@ -287,7 +252,20 @@ def is_substantive_dm(dm_text):
     # Convert to lowercase for case-insensitive matching
     text = dm_text.lower()
     
-    # Check for adoration patterns
+    # Check for very short or emoji-only comments that are likely spam/bots
+    # Remove all non-alphabetic characters and check if it's mostly emojis
+    emoji_only = re.sub(r'[^\U0001F600-\U0001F64F\U0001F300-\U0001F5FF\U0001F680-\U0001F6FF\U0001F1E0-\U0001F1FF]', '', text)
+    letter_only = re.sub(r'[^a-zA-Záéíóúñü]', '', text)
+    
+    # If more than 70% of the characters are emojis, filter it out
+    if len(text) > 0 and len(emoji_only) / len(text) > 0.7:
+        return False
+    
+    # Check for repeating characters like 'jajajaja'
+    if re.search(r'(.)\1{3,}', text):
+        return False
+    
+    # Check for adoration patterns with word boundaries to avoid false positives
     adoration_match = any(re.search(pattern, text) for pattern in ADORATION_PATTERNS)
     
     if adoration_match:
@@ -299,7 +277,14 @@ def is_substantive_dm(dm_text):
     if bot_match:
         return False  # It's a bot message, not substantive
     
-    # If it doesn't match either category, consider it substantive
+    # Check for very short comments (3 characters or less)
+    clean_text = re.sub(r'[^a-zA-Záéíóúñü]', ' ', text)
+    clean_text = re.sub(r'\s+', ' ', clean_text).strip()
+    
+    if len(clean_text) < 3:
+        return False
+    
+    # If it doesn't match any filtering criteria, consider it substantive
     return True
 
 def is_likely_bot_message(message_text):
