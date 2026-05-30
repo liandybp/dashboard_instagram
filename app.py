@@ -1,10 +1,39 @@
-from flask import Flask, render_template
+import streamlit as st
 
-app = Flask(__name__)
+# Header (siempre visible)
+st.title("Dashboard Instagram")
 
-@app.route('/')
-def index():
-    return render_template('index.html')
+# Selector de plataforma
+platform = st.radio("Seleccionar plataforma", ("Instagram", "YouTube", "Ambas"))
 
-if __name__ == '__main__':
-    app.run(debug=True)
+# Tabs
+tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
+    "Resumen",
+    "Tendencia",
+    "Audiencia",
+    "Posts",
+    "Cuándo publicar",
+    "Frecuencia",
+    "Ideas"
+])
+
+with tab1:
+    st.write("Tab 1: en construcción")
+
+with tab2:
+    st.write("Tab 2: en construcción")
+
+with tab3:
+    st.write("Tab 3: en construcción")
+
+with tab4:
+    st.write("Tab 4: en construcción")
+
+with tab5:
+    st.write("Tab 5: en construcción")
+
+with tab6:
+    st.write("Tab 6: en construcción")
+
+with tab7:
+    st.write("Tab 7: en construcción")
