@@ -1,3 +1,7 @@
+# Load environment variables with override
+from dotenv import load_dotenv
+load_dotenv(override=True)
+
 import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
@@ -6,10 +10,6 @@ from datetime import datetime
 import re
 from zoneinfo import ZoneInfo
 import os
-
-# Load environment variables with override
-from dotenv import load_dotenv
-load_dotenv(override=True)
 
 # Import our custom modules
 import refresh
@@ -233,32 +233,32 @@ with tab3:
         
         with col1:
             st.subheader("Edad")
-            fig_age = px.bar(df_audience, x='age', y='count', title="Distribución por Edad")
-            st.plotly_chart(fig_age, use_container_width=True)
+            fig_age_ig = px.bar(df_audience, x='age', y='count', title="Distribución por Edad")
+            st.plotly_chart(fig_age_ig, key="fig_age_ig", use_container_width=True)
             
         with col2:
             st.subheader("Género") 
             # Mock gender data
             gender_data = {"gender": ["Hombre", "Mujer"], "count": [5000, 7500]}
             df_gender = pd.DataFrame(gender_data)
-            fig_gender = px.bar(df_gender, x='gender', y='count', title="Distribución por Género")
-            st.plotly_chart(fig_gender, use_container_width=True)
+            fig_gender_ig = px.bar(df_gender, x='gender', y='count', title="Distribución por Género")
+            st.plotly_chart(fig_gender_ig, key="fig_gender_ig", use_container_width=True)
             
         with col3:
             st.subheader("País")
             # Mock country data
             country_data = {"country": ["EE.UU.", "México", "España"], "count": [4000, 3500, 2500]}
             df_country = pd.DataFrame(country_data)
-            fig_country = px.bar(df_country, x='country', y='count', title="Distribución por País")
-            st.plotly_chart(fig_country, use_container_width=True)
+            fig_country_ig = px.bar(df_country, x='country', y='count', title="Distribución por País")
+            st.plotly_chart(fig_country_ig, key="fig_country_ig", use_container_width=True)
             
         with col4:
             st.subheader("Ciudad")
             # Mock city data
             city_data = {"city": ["Madrid", "Barcelona", "México DF"], "count": [2000, 1500, 1000]}
             df_city = pd.DataFrame(city_data)
-            fig_city = px.bar(df_city, x='city', y='count', title="Distribución por Ciudad")
-            st.plotly_chart(fig_city, use_container_width=True)
+            fig_city_ig = px.bar(df_city, x='city', y='count', title="Distribución por Ciudad")
+            st.plotly_chart(fig_city_ig, key="fig_city_ig", use_container_width=True)
     
     with tab_yt:
         st.subheader("YouTube")
@@ -271,24 +271,24 @@ with tab3:
         
         with col1:
             st.subheader("Edad")
-            fig_age = px.bar(df_audience_yt, x='age', y='count', title="Distribución por Edad")
-            st.plotly_chart(fig_age, use_container_width=True)
+            fig_age_yt = px.bar(df_audience_yt, x='age', y='count', title="Distribución por Edad")
+            st.plotly_chart(fig_age_yt, key="fig_age_yt", use_container_width=True)
             
         with col2:
             st.subheader("Género") 
             # Mock gender data
             gender_data = {"gender": ["Hombre", "Mujer"], "count": [4500, 6000]}
             df_gender = pd.DataFrame(gender_data)
-            fig_gender = px.bar(df_gender, x='gender', y='count', title="Distribución por Género")
-            st.plotly_chart(fig_gender, use_container_width=True)
+            fig_gender_yt = px.bar(df_gender, x='gender', y='count', title="Distribución por Género")
+            st.plotly_chart(fig_gender_yt, key="fig_gender_yt", use_container_width=True)
             
         with col3:
             st.subheader("País")
             # Mock country data
             country_data = {"country": ["EE.UU.", "México", "España"], "count": [3500, 3000, 2000]}
             df_country = pd.DataFrame(country_data)
-            fig_country = px.bar(df_country, x='country', y='count', title="Distribución por País")
-            st.plotly_chart(fig_country, use_container_width=True)
+            fig_country_yt = px.bar(df_country, x='country', y='count', title="Distribución por País")
+            st.plotly_chart(fig_country_yt, key="fig_country_yt", use_container_width=True)
 
 # Tab 4 - Posts
 with tab4:
