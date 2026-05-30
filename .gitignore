@@ -1,0 +1,4 @@
+.env
+data.nosync/
+__pycache__/
+.venv/
