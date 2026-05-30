@@ -174,15 +174,6 @@ def is_substantive_comment(comment_text):
     if len(text) > 0 and len(emoji_only) / len(text) > 0.7:
         return False
     
-# Check for very short or emoji-only comments that are likely spam/bots
-    # Remove all non-alphabetic characters and check if it's mostly emojis
-    emoji_only = re.sub(r'[^\U0001F600-\U0001F64F\U0001F300-\U0001F5FF\U0001F680-\U0001F6FF\U0001F1E0-\U0001F1FF]', '', text)
-    letter_only = re.sub(r'[^a-zA-Záéíóúñü]', '', text)
-    
-    # If more than 70% of the characters are emojis, filter it out
-    if len(text) > 0 and len(emoji_only) / len(text) > 0.7:
-        return False
-    
     # Check for repeating character patterns (e.g., 'jjjj', 'aaaa')
     # Look for 4 or more consecutive identical characters
     if re.search(r'(.)\1{3,}', text):
@@ -234,13 +225,6 @@ def is_substantive_comment(comment_text):
     
     if bot_match:
         return False  # It's a bot message, not substantive
-    
-    # Check for very short comments (3 characters or less)
-    clean_text = re.sub(r'[^a-zA-Záéíóúñü]', ' ', text)
-    clean_text = re.sub(r'\s+', ' ', clean_text).strip()
-    
-    if len(clean_text) < 3:
-        return False
     
     # If it doesn't match any filtering criteria, consider it substantive
     return True
