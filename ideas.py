@@ -2,25 +2,53 @@ import os
 import time
 import json
 from typing import Dict, List, Any
-from anthropic import Anthropic
-from anthropic.types import MessageCreateParams
 import httpx
 from dotenv import load_dotenv
 
 # GOTCHA CRÍTICO #1: load_dotenv(override=True) al inicio
 load_dotenv(override=True)
 
-# GOTCHA CRÍTICO #5: usa anthropic==0.97.0 y httpx==0.28.1 (ya están en requirements.txt)
-# Se asume que estas versiones están instaladas
+# Configuración del modelo local
+LOCAL_LLM_ENABLED = os.getenv("LOCAL_LLM_ENABLED", "false").lower() == "true"
+
+# Importar cliente local solo si está habilitado
+if LOCAL_LLM_ENABLED:
+    import sys
+    import os
+    # Añadir el directorio actual al path para poder importar correctamente
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    from app.local_llm_client import LocalLLMClient, LocalLLMError
 
 # Cargar prompt system desde archivo
 with open("prompts/ideas_system.md", "r", encoding="utf-8") as f:
     SYSTEM_PROMPT = f.read()
 
-# Configuración de clientes Claude
-client = Anthropic(
-    api_key=os.getenv("ANTHROPIC_API_KEY"),
-)
+# Configuración de clientes
+anthropic_client = None
+local_client = None
+
+if not LOCAL_LLM_ENABLED:
+    # Cliente Anthropic (modo original)
+    from anthropic import Anthropic
+    anthropic_client = Anthropic(
+        api_key=os.getenv("ANTHROPIC_API_KEY"),
+    )
+else:
+    # Cliente local
+    try:
+        local_client = LocalLLMClient(
+            endpoint=os.getenv("LOCAL_LLM_ENDPOINT"),
+            model=os.getenv("LOCAL_LLM_MODEL"),
+            max_tokens=int(os.getenv("LOCAL_LLM_MAX_TOKENS")),
+            temperature=float(os.getenv("LOCAL_LLM_TEMPERATURE"))
+        )
+    except Exception as e:
+        print(f"Error al inicializar cliente local: {e}")
+        # Fallback a Anthropic si el cliente local falla
+        from anthropic import Anthropic
+        anthropic_client = Anthropic(
+            api_key=os.getenv("ANTHROPIC_API_KEY"),
+        )
 
 def _build_cached_context(platform: str) -> Dict[str, Any]:
     """
@@ -66,7 +94,7 @@ def _build_discard_context() -> str:
     
     return discard_text
 
-def generate_all_ideas_ig() -> List[Dict[str, Any]]:
+async def generate_all_ideas_ig() -> List[Dict[str, Any]]:
     """
     Genera todas las ideas para Instagram (10 comments + 5 dms + 10 top_content)
     """
@@ -102,26 +130,34 @@ Instrucciones finales:
 
 3. Las ideas deben ser únicas y no repetir los descartes anteriores.
 """
-    
+
     # GOTCHA CRÍTICO #8: retry con backoff 2s/3s/5s/9s para errores 5xx y 529 de Anthropic
     max_retries = 4
     for attempt in range(max_retries):
         try:
-            message = client.messages.create(
-                model="claude-3-5-sonnet-20240620",
-                system=system_prompt_with_context,
-                messages=[
-                    {
-                        "role": "user",
-                        "content": prompt
-                    }
-                ],
-                max_tokens=16000,  # GOTCHA CRÍTICO #7
-                cache_control={"type": "ephemeral"}  # Bloque 1 - cacheado
-            )
-            
-            # Procesar la respuesta de Claude
-            response_text = message.content[0].text
+            if LOCAL_LLM_ENABLED:
+                # Uso del cliente local
+                response_text = await local_client.generate_text(
+                    messages=[{"role": "user", "content": prompt}],
+                    system_prompt=system_prompt_with_context
+                )
+            else:
+                # Uso del cliente Anthropic (modo original)
+                message = anthropic_client.messages.create(
+                    model="claude-3-5-sonnet-20240620",
+                    system=system_prompt_with_context,
+                    messages=[
+                        {
+                            "role": "user",
+                            "content": prompt
+                        }
+                    ],
+                    max_tokens=16000,  # GOTCHA CRÍTICO #7
+                    cache_control={"type": "ephemeral"}  # Bloque 1 - cacheado
+                )
+                
+                # Procesar la respuesta de Claude
+                response_text = message.content[0].text
             
             # Aquí se procesaría el JSON si Claude lo devuelve en formato JSON
             # Para este mock, simplemente retornamos estructura simulada
@@ -138,18 +174,27 @@ Instrucciones finales:
             
             return ideas
             
-        except httpx.HTTPStatusError as e:
-            if e.response.status_code in [500, 502, 503, 504, 529]:
-                # GOTCHA CRÍTICO #8: retry con backoff
-                wait_time = [2, 3, 5, 9][attempt]
-                print(f"Error {e.response.status_code}, reintentando en {wait_time} segundos...")
-                time.sleep(wait_time)
-                continue
-            else:
-                raise
         except Exception as e:
-            print(f"Error inesperado: {e}")
-            raise
+            if LOCAL_LLM_ENABLED:
+                # Manejo de errores para cliente local
+                if isinstance(e, LocalLLMError):
+                    print(f"Error del LLM local: {e}")
+                else:
+                    print(f"Error desconocido en cliente local: {e}")
+            else:
+                # Manejo de errores para Anthropic (modo original)
+                if isinstance(e, httpx.HTTPStatusError) and e.response.status_code in [500, 502, 503, 504, 529]:
+                    # GOTCHA CRÍTICO #8: retry con backoff
+                    wait_time = [2, 3, 5, 9][attempt]
+                    print(f"Error {e.response.status_code}, reintentando en {wait_time} segundos...")
+                    time.sleep(wait_time)
+                    continue
+                else:
+                    raise
+            
+            # Si llegamos aquí, todas las reintentos fallaron o no se usó retry
+            if attempt == max_retries - 1:
+                raise Exception(f"Todos los intentos fallaron: {e}")
     
     # Si llegamos aquí, todas las reintentos fallaron
     raise Exception("Todos los intentos de llamada a Claude fallaron")

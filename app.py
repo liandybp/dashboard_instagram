@@ -2,7 +2,10 @@
 from dotenv import load_dotenv
 load_dotenv(override=True)
 
+# Set page config as the FIRST command in the script
 import streamlit as st
+st.set_page_config(page_title="Dashboard Instagram", layout="wide")
+
 import pandas as pd
 import plotly.graph_objects as go
 import plotly.express as px
@@ -104,12 +107,12 @@ def load_account_data():
         }
     }
 
-# Load data
-data = load_account_data()
-
 # Header section
 st.set_page_config(page_title="Dashboard Instagram", layout="wide")
 st.title("📊 Dashboard Instagram")
+
+# Load data
+data = load_account_data()
 
 # Get account snapshot data
 account_snapshot = data["account_snapshot"]
@@ -381,7 +384,8 @@ with tab7:
         with st.spinner(f"Generando ideas para {platform.lower()}..."):
             try:
                 if platform == "Instagram":
-                    ideas_list = ideas.generate_all_ideas_ig()
+                    import asyncio
+                    ideas_list = asyncio.run(ideas.generate_all_ideas_ig())
                 else:
                     ideas_list = ideas.generate_all_ideas_yt()
                 
