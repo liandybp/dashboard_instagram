@@ -72,9 +72,21 @@ El dashboard estará disponible en http://localhost:8501
 | plotly.exceptions.PlotlyError | Revisar estructura de datos para gráficos |
 | FileNotFoundError: [Errno 2] No such file or directory | Asegurar que las rutas a archivos existen |
 
-## Personalización con Claude Code
+## Documentación Completa
+
+Este proyecto incluye documentación exhaustiva en la carpeta `docs/`:
+
+- **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)** - Arquitectura general, flujos de datos, componentes
+- **[docs/SETUP.md](docs/SETUP.md)** - Instalación paso a paso, configuración, troubleshooting
+- **[docs/API_GUIDE.md](docs/API_GUIDE.md)** - Guía completa de endpoints Zernio, ejemplos de respuesta
+- **[docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)** - Para desarrolladores: testing, conventions, agregar features
+- **[docs/QUICK_REFERENCE.md](docs/QUICK_REFERENCE.md)** - Referencia rápida, comandos, snippets
+
+## Personalización
 
 Los siguientes ejemplos muestran cómo personalizar el sistema:
-- Modificar prompt en prompts/ideas_system.md
-- Cambiar reglas de filtrado de comentarios en idea_filters.py
-- Adaptar métricas para diferentes plataformas
+- Modificar prompt en `prompts/ideas_system.md`
+- Cambiar reglas de filtrado de comentarios en `src/components/idea_filters.py`
+- Adaptar métricas para diferentes plataformas en `src/data/loader.py`
+- Crear nuevas pestañas heredando de `BaseTab`
+- Agregar nuevos endpoints del cliente Zernio

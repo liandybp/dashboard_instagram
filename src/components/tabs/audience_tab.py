@@ -50,6 +50,8 @@ class AudienceTab(BaseTab):
                 {"label": "España", "count": 4000, "pct": 40.0},
                 {"label": "México", "count": 3500, "pct": 35.0},
                 {"label": "EE.UU.", "count": 2500, "pct": 25.0},
+                {"label": "Colombia", "count": 2000, "pct": 20.0},
+                {"label": "Argentina", "count": 1500, "pct": 15.0},
             ]
 
         def _fallback_city():
@@ -80,6 +82,7 @@ class AudienceTab(BaseTab):
             if g1["pct"] >= 80:
                 st.info("La audiencia está muy desbalanceada por género (>80/20). Revisa si tu mensaje está hipersegmentado.")
 
+        # Fila 1: 4 gráficos
         col1, col2, col3, col4 = st.columns(4)
 
         with col1:
@@ -97,28 +100,35 @@ class AudienceTab(BaseTab):
             fig = px.bar(df_country, x="label", y="count", title="Distribución por País")
             st.plotly_chart(fig, key="aud_country_ig", use_container_width=True)
 
-            if not df_country.empty:
-                top3_pct = df_country.sort_values("pct", ascending=False).head(3)["pct"].sum()
-                st.caption(f"Top 3 países = {top3_pct:.1f}% de tu audiencia")
-                st.dataframe(
-                    df_country.sort_values("pct", ascending=False)[["label", "pct"]].rename(
-                        columns={"label": "País", "pct": "% audiencia"}
-                    ),
-                    use_container_width=True,
-                    hide_index=True,
-                )
-                top_country_pct = float(df_country.sort_values("pct", ascending=False).iloc[0]["pct"])
-                if top_country_pct > 60:
-                    st.info("Audiencia concentrada: tu país #1 supera el 60%. Buen escenario para un nicho local.")
-                elif top_country_pct < 30:
-                    st.info("Audiencia dispersa: tu país #1 está por debajo del 30%. Considera mensajes más globales.")
-                else:
-                    st.info("Audiencia balanceada: tienes una mezcla sana entre foco local e internacional.")
-
         with col4:
             st.subheader("Ciudad")
             fig = px.bar(df_city, x="label", y="count", title="Distribución por Ciudad")
             st.plotly_chart(fig, key="aud_city_ig", use_container_width=True)
+
+        # Fila 2: Tabla Top 5 Países en primera columna
+        col1_tabla, col2_vacio, col3_vacio, col4_vacio = st.columns(4)
+
+        with col1_tabla:
+            st.subheader("Top 5 Países")
+            if not df_country.empty:
+                df_country_sorted = df_country.sort_values("pct", ascending=False)
+                top5_pct = df_country_sorted.head(5)["pct"].sum()
+                st.caption(f"Top 5 = {top5_pct:.1f}%")
+                st.dataframe(
+                    df_country_sorted.head(5)[["label", "pct"]].reset_index(drop=True).rename(
+                        columns={"label": "País", "pct": "%"}
+                    ),
+                    use_container_width=True,
+                    hide_index=True,
+                    height=200,
+                )
+                top_country_pct = float(df_country_sorted.iloc[0]["pct"])
+                if top_country_pct > 60:
+                    st.info("Concentrada")
+                elif top_country_pct < 30:
+                    st.info("Dispersa")
+                else:
+                    st.info("Balanceada")
 
     def _render_youtube(self) -> None:
         st.subheader("YouTube")
