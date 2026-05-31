@@ -32,7 +32,7 @@ def init_db():
             id TEXT,
             platform TEXT,
             username TEXT,
-            followers INTEGER,
+            follower_count INTEGER,
             profile_pic_url TEXT,
             updated_at TEXT,
             PRIMARY KEY (id, platform)
@@ -306,18 +306,35 @@ def write_account_snapshot(account_data):
     """Write account snapshot data."""
     conn = get_connection()
     cursor = conn.cursor()
-    cursor.execute('''
-        INSERT OR REPLACE INTO account_snapshot 
-        (id, platform, username, followers, profile_pic_url, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?)
-    ''', (
-        account_data['id'],
-        account_data['platform'],
-        account_data['username'],
-        account_data['followers'],
-        account_data['profile_pic_url'],
-        account_data['updated_at']
-    ))
+    if isinstance(account_data, list):
+        # Handle list of account data
+        for data in account_data:
+            cursor.execute('''
+                INSERT OR REPLACE INTO account_snapshot 
+                (id, platform, username, follower_count, profile_pic_url, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?)
+            ''', (
+                data['id'],
+                data['platform'],
+                data['username'],
+                data['follower_count'],
+                data['profile_pic_url'],
+                data['updated_at']
+            ))
+    else:
+        # Handle single account data
+        cursor.execute('''
+            INSERT OR REPLACE INTO account_snapshot 
+            (id, platform, username, follower_count, profile_pic_url, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?)
+        ''', (
+            account_data['id'],
+            account_data['platform'],
+            account_data['username'],
+            account_data['follower_count'],
+            account_data['profile_pic_url'],
+            account_data['updated_at']
+        ))
     conn.commit()
     conn.close()
 
@@ -421,7 +438,7 @@ def write_posts(posts_data):
             post['platform'],
             post['caption'],
             post['permalink'],
-            post['thumbnail_url'],
+            post['image_url'],
             post['likes'],
             post['comments_count'],
             post['saves'],

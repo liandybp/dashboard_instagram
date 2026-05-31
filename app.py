@@ -1,224 +1,123 @@
+#!/usr/bin/env python3
+
 # Load environment variables with override
 from dotenv import load_dotenv
 load_dotenv(override=True)
 
 # Set page config as the FIRST command in the script
 import streamlit as st
-st.set_page_config(page_title="Dashboard Instagram", layout="wide")
-
 import pandas as pd
-import plotly.graph_objects as go
 import plotly.express as px
-from datetime import datetime
-import re
-from zoneinfo import ZoneInfo
+import plotly.graph_objects as go
+
 import os
+import sys
 
-# Import our custom modules
-import refresh
-from idea_filters import is_substantive_comment
-import ideas
+# Add the current directory to Python path to allow imports
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
-# Define ID stripping patterns
-_ID_PATTERN_LONG = re.compile(r"\b(post|comment|message)[\s_-]?id[:\s]*\d+\b", re.IGNORECASE)
-_ID_PATTERN_LABELED = re.compile(r"\b(post|comment|message)\s+\d{10,}\b", re.IGNORECASE)
-_ID_PATTERN_BARE = re.compile(r"\b\d{12,}\b")
+# Import our modules
+from src.data.loader import load_account_data_from_zernio_with_fallback
+from src.components.idea_filters import filter_spam_comments
 
-def strip_ids(text):
-    """Strip numeric IDs that might have been added by Claude"""
-    if not isinstance(text, str):
-        return text
-    text = _ID_PATTERN_LONG.sub("", text)
-    text = _ID_PATTERN_LABELED.sub("", text)
-    text = _ID_PATTERN_BARE.sub("", text)
-    return text.strip()
+# Load environment variables
+from dotenv import load_dotenv
+load_dotenv(override=True)
 
-# Function to get health indicator color
-def get_health_color(status):
-    if status == "healthy":
-        return "🟢"
-    elif status == "warning":
-        return "🟡"
-    else:
-        return "🔴"
+# Set page config
+st.set_page_config(
+    page_title="Instagram Dashboard",
+    page_icon="📊",
+    layout="wide"
+)
 
-# Function to load data (mocked for now, will be replaced with actual data loading)
+# Function to load account data (this would normally come from a database or API)
 @st.cache_data(ttl=300)  # Cache for 5 minutes
 def load_account_data():
-    """Load account data - this would connect to database in real implementation"""
-    # Mock data for demonstration purposes
-    return {
-        "account_snapshot": {
-            "username": "test_user",
-            "profile_image": "https://via.placeholder.com/100",
-            "follower_count": 12500,
-            "account_health": {"status": "healthy"}
-        },
-        "account_insights_30d": {
-            "reach": 45000,
-            "views": 22000,
-            "engaged": 3800,
-            "interactions": 1200,
-            "likes": 950,
-            "comments": 180,
-            "saves": 75,
-            "shares": 45
-        },
-        "daily_metrics": {
-            "date": ["2023-01-01", "2023-01-02", "2023-01-03", "2023-01-04", "2023-01-05"],
-            "reach": [1000, 1200, 950, 1100, 1300],
-            "views": [500, 600, 480, 550, 700],
-            "engaged": [200, 250, 180, 220, 300],
-            "interactions": [50, 60, 45, 55, 70]
-        },
-        "follower_history": {
-            "date": ["2023-01-01", "2023-01-02", "2023-01-03", "2023-01-04", "2023-01-05"],
-            "followers": [12000, 12100, 12050, 12200, 12300]
-        },
-        "audience_ig": {
-            "age": [25, 35, 45, 55],
-            "count": [3000, 4500, 2800, 1200]
-        },
-        "audience_yt": {
-            "age": [25, 35, 45, 55],
-            "count": [3000, 4500, 2800, 1200]
-        },
-        "posts": [
-            {"id": 1, "image_url": "https://via.placeholder.com/300", "title": "Post 1"},
-            {"id": 2, "image_url": "https://via.placeholder.com/300", "title": "Post 2"},
-            {"id": 3, "image_url": "https://via.placeholder.com/300", "title": "Post 3"},
-            {"id": 4, "image_url": "https://via.placeholder.com/300", "title": "Post 4"},
-            {"id": 5, "image_url": "https://via.placeholder.com/300", "title": "Post 5"},
-            {"id": 6, "image_url": "https://via.placeholder.com/300", "title": "Post 6"}
-        ],
-        "comments": [
-            {"id": 1, "text": "¡Excelente contenido!", "author": "user1", "timestamp": "2023-01-01"},
-            {"id": 2, "text": "Me encanta este post", "author": "user2", "timestamp": "2023-01-01"},
-            {"id": 3, "text": "te amo eres mi ídola", "author": "user3", "timestamp": "2023-01-01"}
-        ],
-        "best_time": {
-            "hour": [9, 10, 11, 12, 13, 14],
-            "day_of_week": ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"],
-            "value": [85, 75, 90, 65, 80, 95]
-        },
-        "content_decay": {
-            "days": [1, 7, 14, 21, 30],
-            "engagement": [100, 75, 60, 45, 30]
-        }
-    }
+    return load_account_data_from_zernio_with_fallback()
 
-# Header section
-st.set_page_config(page_title="Dashboard Instagram", layout="wide")
-st.title("📊 Dashboard Instagram")
-
-# Load data
+# Load the data
 data = load_account_data()
 
-# Get account snapshot data
-account_snapshot = data["account_snapshot"]
-health_icon = get_health_color(account_snapshot["account_health"]["status"])
-
-# Create header row with profile info and refresh button
-col1, col2, col3, col4 = st.columns([1, 3, 1, 1])
-with col1:
-    st.image(account_snapshot["profile_image"], width=80)
-with col2:
-    st.subheader(f"@{account_snapshot['username']}")
-    st.metric("Seguidores", account_snapshot["follower_count"])
-    st.markdown(f"Estado: {health_icon} {account_snapshot['account_health']['status']}")
-with col3:
-    # Last updated info
-    st.write("Última actualización: 2023-01-05 14:30")
-with col4:
-    if st.button("🔄 Refrescar datos"):
-        refresh.main()
-
-# Global platform selector
-platform = st.radio("Plataforma:", ["Instagram", "YouTube", "Ambas"], horizontal=True)
+# Main title
+st.title("📊 Dashboard de Instagram")
 
 # Create tabs
 tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
-    "Resumen", 
-    "Tendencia", 
-    "Audiencia", 
-    "Posts", 
-    "Cuándo publicar", 
-    "Frecuencia", 
-    "Ideas"
+    "📈 Métricas", 
+    "🔍 Health", 
+    "👥 Audiencia", 
+    "📸 Posts", 
+    "⏰ Mejor Horario", 
+    "📊 Frecuencia", 
+    "💡 Ideas"
 ])
 
-# Tab 1 - Resumen
+# Tab 1 - Metrics
 with tab1:
-    st.subheader("📈 KPIs del Último Mes")
+    st.subheader("📈 Métricas Generales")
     
-    insights = data["account_insights_30d"]
-    
-    # Create metrics grid
-    col1, col2, col3, col4, col5 = st.columns(5)
-    
-    with col1:
-        st.metric("Reach", insights["reach"])
-    with col2:
-        st.metric("Views", insights["views"])
-    with col3:
-        st.metric("Engaged", insights["engaged"])
-    with col4:
-        st.metric("Interacciones", insights["interactions"])
-    with col5:
-        st.metric("Likes", insights["likes"])
-    
-    # Additional metrics
-    col6, col7, col8 = st.columns(3)
-    with col6:
-        st.metric("Comentarios", insights["comments"])
-    with col7:
-        st.metric("Saves", insights["saves"])
-    with col8:
-        st.metric("Shares", insights["shares"])
+    # Get account snapshot data
+    account_snapshot = data["account_snapshot"]
+    if account_snapshot:
+        snapshot = account_snapshot
+        
+        # Create 4-column layout for key metrics
+        col1, col2, col3, col4 = st.columns(4)
+        
+        with col1:
+            st.metric("Seguidores", f"{snapshot.get('followers_count', 0):,}")
+            
+        with col2:
+            st.metric("Publicaciones", f"{snapshot.get('posts_count', 0):,}")
+            
+        with col3:
+            st.metric("Engagement Rate", f"{snapshot.get('engagement_rate', 0):.2f}%")
+            
+        with col4:
+            st.metric("Reach", f"{snapshot.get('reach', 0):,}")
+        
+        # Show engagement trend
+        daily_metrics = data["daily_metrics"]
+        if daily_metrics:
+            df_daily = pd.DataFrame(daily_metrics)
+            df_daily['date'] = pd.to_datetime(df_daily['date'])
+            
+            fig = px.line(df_daily, x='date', y='engagement_rate', title="Tendencia de Engagement")
+            st.plotly_chart(fig, use_container_width=True)
+    else:
+        st.info("No hay datos de métricas disponibles")
 
-# Tab 2 - Tendencia
-with tab2:
-    st.subheader("📈 Tendencia de Métricas")
-    
-    # Metrics selector
-    metrics = ["reach", "views", "engaged", "interactions"]
-    selected_metrics = st.multiselect("Seleccionar métricas:", metrics, default=metrics)
-    
-    # Plot line chart
-    df_daily = pd.DataFrame(data["daily_metrics"])
-    
-    fig = go.Figure()
-    
-    for metric in selected_metrics:
-        fig.add_trace(go.Scatter(
-            x=df_daily['date'],
-            y=df_daily[metric],
-            mode='lines+markers',
-            name=metric.capitalize(),
-            line=dict(width=2)
-        ))
-    
-    # Add follower history
-    df_followers = pd.DataFrame(data["follower_history"])
-    fig.add_trace(go.Scatter(
-        x=df_followers['date'],
-        y=df_followers['followers'],
-        mode='lines+markers',
-        name='Seguidores',
-        line=dict(width=2, dash='dash'),
-        yaxis='y2'
-    ))
-    
-    fig.update_layout(
-        title="Tendencia de Métricas",
-        xaxis_title="Fecha",
-        yaxis_title="Valor",
-        yaxis2=dict(title="Seguidores", overlaying='y', side='right')
-    )
-    
-    st.plotly_chart(fig, use_container_width=True)
+# Tab 2 - Health
+    with tab2:
+        st.subheader("🔍 Health de la Cuenta")
+        
+        # Get account health data
+        account_health = data["account_health"]
+        if account_health:
+            health = account_health
+            
+            # Create 3-column layout for health metrics
+            col1, col2, col3 = st.columns(3)
+            
+            with col1:
+                st.metric("Estado", f"{health.get('status', 'unknown')}")
+                
+            with col2:
+                st.metric("ID Cuenta", f"{health.get('id', '')}")
+                
+            with col3:
+                st.metric("Plataforma", f"{health.get('platform', '')}")
+            
+            # Show health details
+            st.subheader("Detalles de Salud")
+            for key, value in health.items():
+                if key not in ['id', 'platform', 'status']:
+                    st.write(f"**{key}**: {value}")
+        else:
+            st.info("No hay datos de salud disponibles")
 
-# Tab 3 - Audiencia
+# Tab 3 - Audience
 with tab3:
     st.subheader("👥 Audiencia")
     
@@ -228,7 +127,15 @@ with tab3:
     with tab_ig:
         st.subheader("Instagram")
         
-        audience_data = data["audience_ig"]
+        # Mock audience data since we don't have real demographic data from Zernio yet
+        audience_data = [
+            {"age": "18-24", "count": 1500},
+            {"age": "25-34", "count": 2500},
+            {"age": "35-44", "count": 2000},
+            {"age": "45-54", "count": 1200},
+            {"age": "55+", "count": 800}
+        ]
+        
         df_audience = pd.DataFrame(audience_data)
         
         # Create 4 bar charts
@@ -266,7 +173,15 @@ with tab3:
     with tab_yt:
         st.subheader("YouTube")
         
-        audience_yt = data["audience_yt"]
+        # Mock audience data for YouTube
+        audience_yt = [
+            {"age": "18-24", "count": 1200},
+            {"age": "25-34", "count": 2000},
+            {"age": "35-44", "count": 1800},
+            {"age": "45-54", "count": 1000},
+            {"age": "55+", "count": 600}
+        ]
+        
         df_audience_yt = pd.DataFrame(audience_yt)
         
         # Create 3 bar charts (no city for YouTube)
@@ -300,77 +215,95 @@ with tab4:
     # Create 3-column grid for posts
     cols = st.columns(3)
     
-    for i, post in enumerate(data["posts"]):
-        with cols[i % 3]:
-            st.image(post["image_url"], use_column_width=True)
-            st.write(f"**{post['title']}**")
-            
-            # Show comments button
-            if st.button("Ver comentarios", key=f"comment_{post['id']}"):
-                with st.expander("Comentarios"):
-                    for comment in data["comments"]:
-                        # Filter out non-substantive comments
-                        if is_substantive_comment(comment["text"]):
-                            st.write(f"🗣️ **{comment['author']}**: {strip_ids(comment['text'])}")
-                        else:
-                            # Show filtered comment as a note
-                            st.markdown(f"💬 _Comentario filtrado_")
+    posts = data["posts"]
+    if posts:
+        for i, post in enumerate(posts):
+            with cols[i % 3]:
+                # Use thumbnail_url instead of image_url (as we fixed in populate_db.py)
+                image_url = post.get("thumbnail_url", "")
+                if image_url:
+                    st.image(image_url, use_column_width=True)
+                else:
+                    st.image("https://placehold.co/300x300?text=No+Image", use_column_width=True)
+                
+                caption = post.get("caption", "Sin título")
+                st.write(f"**{caption}**")
+                
+                # Show engagement metrics
+                likes = post.get("likes_count", 0)
+                comments = post.get("comments_count", 0)
+                st.write(f"👍 {likes} | 💬 {comments}")
+                
+                # Show comments button
+                if st.button("Ver comentarios", key=f"comment_{post['id']}"):
+                    with st.expander("Comentarios"):
+                        for comment in data["comments"]:
+                            # Filter out non-substantive comments
+                            if filter_spam_comments(comment["text"]):
+                                st.write(f"🗣️ **{comment['author']}**: {comment['text']}")
+                            else:
+                                # Show filtered comment as a note
+                                st.markdown("💬 _Comentario filtrado_")
+    else:
+        st.info("No hay posts disponibles")
 
-# Tab 5 - Cuándo publicar
-with tab5:
-    st.subheader("⏰ Mejor Horario para Publicar")
-    
-    best_time_data = data["best_time"]
-    df_best_time = pd.DataFrame(best_time_data)
-    
-    # Convert to heatmap format
-    heatmap_data = df_best_time.pivot_table(
-        values='value', 
-        index='day_of_week', 
-        columns='hour', 
-        aggfunc='mean'
-    )
-    
-    fig = go.Figure(data=go.Heatmap(
-        z=heatmap_data.values,
-        x=heatmap_data.columns,
-        y=heatmap_data.index,
-        colorscale='Blues',
-        text=heatmap_data.values,
-        texttemplate="%{text:.0f}"
-    ))
-    
-    fig.update_layout(
-        title="Mejor Horario por Día de la Semana",
-        xaxis_title="Hora del Día",
-        yaxis_title="Día de la Semana"
-    )
-    
-    st.plotly_chart(fig, use_container_width=True)
-
-# Tab 6 - Frecuencia
-with tab6:
-    st.subheader("📊 Frecuencia de Publicación")
-    
-    # Scatter plot: posts/week vs avg_engagement
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        st.subheader("Posts por Semana vs Engagement Promedio")
-        fig_scatter = px.scatter(
-            x=[1, 2, 3, 4], 
-            y=[85, 75, 90, 65],
-            labels={'x': 'Posts por Semana', 'y': 'Engagement Promedio'},
-            title="Relación entre Frecuencia y Engagement"
-        )
-        st.plotly_chart(fig_scatter, use_container_width=True)
+# Tab 5 - Best Time to Post
+    with tab5:
+        st.subheader("⏰ Mejor Horario para Publicar")
         
-    with col2:
-        st.subheader("Decaimiento del Contenido")
-        content_decay_data = data["content_decay"]
-        df_decay = pd.DataFrame(content_decay_data)
-        fig_decay = px.bar(df_decay, x='days', y='engagement', title="Engagement por Días desde Publicación")
-        st.plotly_chart(fig_decay, use_container_width=True)
+        # Get best time data (this was renamed in the loader)
+        best_time_data = data.get("best_time_to_post", [])
+        if best_time_data:
+            df_best_time = pd.DataFrame(best_time_data)
+            
+            # Convert to heatmap format
+            heatmap_data = df_best_time.pivot_table(
+                values='value', 
+                index='day_of_week', 
+                columns='hour', 
+                aggfunc='mean'
+            )
+            
+            fig = go.Figure(data=go.Heatmap(
+                z=heatmap_data.values,
+                x=heatmap_data.columns,
+                y=heatmap_data.index,
+                colorscale='Blues',
+                text=heatmap_data.values,
+                texttemplate="%{text:.0f}"
+            ))
+            
+            fig.update_layout(
+                title="Mejor Horario por Día de la Semana",
+                xaxis_title="Hora del Día",
+                yaxis_title="Día de la Semana"
+            )
+            
+            st.plotly_chart(fig, use_container_width=True)
+        else:
+            st.info("No hay datos de mejor horario disponibles")
+
+# Tab 6 - Posting Frequency
+    with tab6:
+        st.subheader("📊 Frecuencia de Publicación")
+        
+        # Scatter plot: posts/week vs avg_engagement
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.subheader("Posts por Semana vs Engagement Promedio")
+            fig_scatter = px.scatter(
+                x=[1, 2, 3, 4], 
+                y=[85, 75, 90, 65],
+                labels={'x': 'Posts por Semana', 'y': 'Engagement Promedio'},
+                title="Relación entre Frecuencia y Engagement"
+            )
+            st.plotly_chart(fig_scatter, use_container_width=True)
+            
+        with col2:
+            st.subheader("Decaimiento del Contenido")
+            # content_decay is not available in current data structure
+            st.info("No hay datos de decaimiento disponibles (no implementado)")
 
 # Tab 7 - Ideas
 with tab7:
@@ -385,9 +318,11 @@ with tab7:
             try:
                 if platform == "Instagram":
                     import asyncio
-                    ideas_list = asyncio.run(ideas.generate_all_ideas_ig())
+                    from src.components.ideas import generate_all_ideas_ig
+                    ideas_list = asyncio.run(generate_all_ideas_ig())
                 else:
-                    ideas_list = ideas.generate_all_ideas_yt()
+                    from src.components.ideas import generate_all_ideas_yt
+                    ideas_list = generate_all_ideas_yt()
                 
                 st.success("Ideas generadas con éxito!")
                 # Store ideas in session state
@@ -418,7 +353,7 @@ with tab7:
                         st.markdown(f"**Ángulo sugerido:** {idea['suggested_angle']}")
                         
                         # Discard button with modal
-                        if st.button(f"✕ Descartar", key=f"discard_{idea['id']}"):
+                        if st.button("✕ Descartar", key=f"discard_{idea['id']}"):
                             # Show discard modal
                             with st.expander("Descartar idea"):
                                 reason_quick = st.radio(
@@ -427,7 +362,8 @@ with tab7:
                                 )
                                 reason_text = st.text_area("Descripción detallada:")
                                 if st.button("Confirmar descarte"):
-                                    ideas.discard_idea(idea['id'], reason_quick, reason_text)
+                                    from src.components.ideas import discard_idea
+                                    discard_idea(idea['id'], reason_quick, reason_text)
                                     st.success(f"Idea descartada: {idea['angle']}")
     else:
         st.info("Haz clic en 'Generar todas las ideas' para comenzar.")
