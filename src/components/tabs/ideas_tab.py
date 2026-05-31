@@ -4,6 +4,7 @@ import asyncio
 
 import streamlit as st
 
+from src.components.idea_filters import count_substantive
 from src.components.tabs.base_tab import BaseTab
 
 
@@ -16,6 +17,23 @@ class IdeasTab(BaseTab):
 
     def render(self) -> None:
         st.subheader("💡 Sistema de Ideas")
+
+        comments = self.data.get("comments", [])
+        dms = self.data.get("dms", [])
+        demographics = self.data.get("demographics", {}).get("instagram", {})
+
+        age = demographics.get("age", [])
+        gender = demographics.get("gender", [])
+        dominant_age = max(age, key=lambda x: x.get("pct", 0))["label"] if age else "N/D"
+        dominant_gender = max(gender, key=lambda x: x.get("pct", 0))["label"] if gender else "N/D"
+
+        with st.expander("📊 Contexto disponible"):
+            st.markdown(f"- Comentarios: **{len(comments)}** total · **{count_substantive(comments)}** sustantivos")
+            st.markdown(f"- DMs: **{len(dms)}** total · **{count_substantive(dms)}** sustantivos")
+            st.markdown(f"- Demografía dominante: **{dominant_age}** · **{dominant_gender}**")
+            estimated_tokens = (len(comments) * 30) + (len(dms) * 40) + 16000
+            estimated_cost = (estimated_tokens * 0.000003) + (16000 * 0.000015)
+            st.caption(f"Costo estimado de generación: ~${estimated_cost:.2f}")
 
         platform = st.radio("Plataforma:", ["Instagram", "YouTube"], horizontal=True)
 
@@ -61,6 +79,19 @@ class IdeasTab(BaseTab):
                     st.markdown("> " + "\n> ".join(idea["evidence_quotes"]))
                     st.markdown(f"**Por qué es buena idea:** {idea['why_good_idea']}")
                     st.markdown(f"**Ángulo sugerido:** {idea['suggested_angle']}")
+
+                    basis_post_ids = idea.get("basis_post_ids", [])
+                    if basis_post_ids:
+                        posts_by_id = {str(p.get("id")): p for p in self.data.get("posts", [])}
+                        linked = False
+                        for pid in basis_post_ids:
+                            post = posts_by_id.get(str(pid))
+                            if post and post.get("permalink"):
+                                st.markdown(f"[Ver post original →]({post['permalink']})")
+                                linked = True
+                                break
+                        if not linked:
+                            st.caption("No se encontró permalink para basis_post_ids en cache.")
 
                     if st.button("✕ Descartar", key=f"discard_{idea['id']}"):
                         with st.expander("Descartar idea"):

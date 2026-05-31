@@ -21,3 +21,21 @@ def filter_spam_comments(comment_text):
             
     # If we get here, it's likely a substantive comment
     return True
+
+
+def is_substantive_comment(comment_text):
+    """Alias semántico para reutilizar el filtro en métricas y contexto."""
+    return filter_spam_comments(comment_text or "")
+
+
+def count_substantive(comments_list):
+    """Count substantive comments in a list of comment dicts or raw strings."""
+    total = 0
+    for item in comments_list or []:
+        if isinstance(item, dict):
+            text = item.get("text", "")
+        else:
+            text = str(item)
+        if is_substantive_comment(text):
+            total += 1
+    return total

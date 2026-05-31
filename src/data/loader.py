@@ -52,6 +52,12 @@ def _build_fallback_data(reason: str = ""):
         "comments": [],
         "follower_history": [],
         "best_time_to_post": [],
+        "posting_frequency": [],
+        "content_decay": [],
+        "demographics": {
+            "instagram": {"age": [], "gender": [], "country": [], "city": []},
+            "youtube": {"age": [], "gender": [], "country": []},
+        },
     }
 
 
@@ -140,6 +146,78 @@ def _normalize_daily_metrics(daily_items: list):
         )
 
     normalized.sort(key=lambda x: x["date"])
+    return normalized
+
+
+def _normalize_best_time(items: list):
+    normalized = []
+    day_map = {
+        0: "Lunes", 1: "Martes", 2: "Miercoles", 3: "Jueves",
+        4: "Viernes", 5: "Sabado", 6: "Domingo",
+    }
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        hour = _pick_first(item, ["hour", "hora"], None)
+        if hour is None:
+            continue
+        day = _pick_first(item, ["day_of_week", "dayOfWeek", "day"], None)
+        if isinstance(day, int):
+            day_label = day_map.get(day, str(day))
+        else:
+            day_label = str(day) if day is not None else "N/A"
+        value = _to_float(_pick_first(item, ["value", "score", "avg_engagement", "avgEngagement"], 0), 0)
+        normalized.append({"day_of_week": day_label, "hour": int(_to_float(hour, 0)), "value": float(value)})
+    return normalized
+
+
+def _normalize_posting_frequency(items: list):
+    normalized = []
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        ppw = _to_float(_pick_first(item, ["postsPerWeek", "posts_per_week", "x"], None), None)
+        er = _to_float(_pick_first(item, ["avgEngagementRate", "engagement_rate", "y"], None), None)
+        if ppw is None or er is None:
+            continue
+        normalized.append({
+            "posts_per_week": float(ppw),
+            "avg_engagement_rate": float(er),
+            "weeks_count": int(_to_float(_pick_first(item, ["weeksCount", "weeks_count"], 1), 1)),
+        })
+    return normalized
+
+
+def _normalize_content_decay(items: list):
+    normalized = []
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        bucket = _pick_first(item, ["bucketLabel", "bucket", "label"], None)
+        pct = _to_float(_pick_first(item, ["avgPctOfFinal", "value", "percentage"], None), None)
+        if bucket is None or pct is None:
+            continue
+        normalized.append({"bucket": str(bucket), "avg_pct_of_final": float(pct)})
+    return normalized
+
+
+def _normalize_demographics(items: list):
+    normalized = []
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        label = _pick_first(item, ["label", "name", "value", "key", "bucket"], None)
+        count = _pick_first(item, ["count", "value", "followers", "audience"], None)
+        if label is None or count is None:
+            continue
+        normalized.append({"label": str(label), "count": float(_to_float(count, 0))})
+    total = sum(x["count"] for x in normalized)
+    if total > 0:
+        for row in normalized:
+            row["pct"] = round((row["count"] / total) * 100, 2)
+    else:
+        for row in normalized:
+            row["pct"] = 0.0
     return normalized
 
 
@@ -342,10 +420,58 @@ def load_account_data_from_zernio_with_fallback():
         except Exception as e:
             print(f"Error getting comments: {e}")
             comments_result = {"comments": []}
+
+        # Load posting frequency
+        try:
+            posting_frequency_result = client.get_posting_frequency(platform="instagram", account_id=account_id)
+        except AddonRequiredError as e:
+            print(f"Addon required for posting frequency: {e}")
+            posting_frequency_result = {"data": []}
+        except Exception as e:
+            print(f"Error getting posting frequency: {e}")
+            posting_frequency_result = {"data": []}
+
+        # Load content decay
+        try:
+            content_decay_result = client.get_content_decay(platform="instagram", account_id=account_id)
+        except AddonRequiredError as e:
+            print(f"Addon required for content decay: {e}")
+            content_decay_result = {"data": []}
+        except Exception as e:
+            print(f"Error getting content decay: {e}")
+            content_decay_result = {"data": []}
+
+        # Load demographics IG (age, gender, country, city)
+        def _safe_demographics(breakdown: str):
+            try:
+                return client.get_demographics(account_id=account_id, breakdown=breakdown)
+            except AddonRequiredError as e:
+                print(f"Addon required for demographics {breakdown}: {e}")
+            except Exception as e:
+                print(f"Error getting demographics {breakdown}: {e}")
+            return {"data": []}
+
+        demographics_age_ig = _safe_demographics("age")
+        demographics_gender_ig = _safe_demographics("gender")
+        demographics_country_ig = _safe_demographics("country")
+        demographics_city_ig = _safe_demographics("city")
+
+        # Load demographics YT (si hay cuenta conectada)
+        demographics_age_yt = {"data": []}
+        demographics_gender_yt = {"data": []}
+        demographics_country_yt = {"data": []}
+        yt_account_id = client.account_id_youtube
+        if yt_account_id:
+            try:
+                demographics_age_yt = client.get_demographics(account_id=yt_account_id, breakdown="age")
+                demographics_gender_yt = client.get_demographics(account_id=yt_account_id, breakdown="gender")
+                demographics_country_yt = client.get_demographics(account_id=yt_account_id, breakdown="country")
+            except Exception as e:
+                print(f"Error getting youtube demographics: {e}")
             
         # Load posts (this is what we use for posts)
         try:
-                posts_result = client.get_analytics(platform="instagram", account_id=account_id)
+            posts_result = client.get_analytics(platform="instagram", account_id=account_id)
         except AddonRequiredError as e:
             print(f"Addon required for posts: {e}")
             posts_result = {"posts": []}
@@ -367,7 +493,29 @@ def load_account_data_from_zernio_with_fallback():
         posts = _extract_list(posts_result, ["posts", "data", "items", "analytics"])
         comments = _extract_list(comments_result, ["comments", "data", "items"])
         follower_history = _extract_list(follower_result, ["history", "data", "rows"])
-        best_time_to_post = _extract_list(best_time_result, ["best_time", "bestTime", "slots", "data"])
+        best_time_to_post = _normalize_best_time(
+            _extract_list(best_time_result, ["best_time", "bestTime", "slots", "data", "items"])
+        )
+        posting_frequency = _normalize_posting_frequency(
+            _extract_list(posting_frequency_result, ["data", "rows", "items", "postingFrequency"])
+        )
+        content_decay = _normalize_content_decay(
+            _extract_list(content_decay_result, ["data", "rows", "items", "contentDecay", "buckets"])
+        )
+
+        demographics = {
+            "instagram": {
+                "age": _normalize_demographics(_extract_list(demographics_age_ig, ["data", "rows", "items", "demographics"])),
+                "gender": _normalize_demographics(_extract_list(demographics_gender_ig, ["data", "rows", "items", "demographics"])),
+                "country": _normalize_demographics(_extract_list(demographics_country_ig, ["data", "rows", "items", "demographics"])),
+                "city": _normalize_demographics(_extract_list(demographics_city_ig, ["data", "rows", "items", "demographics"])),
+            },
+            "youtube": {
+                "age": _normalize_demographics(_extract_list(demographics_age_yt, ["data", "rows", "items", "demographics"])),
+                "gender": _normalize_demographics(_extract_list(demographics_gender_yt, ["data", "rows", "items", "demographics"])),
+                "country": _normalize_demographics(_extract_list(demographics_country_yt, ["data", "rows", "items", "demographics"])),
+            },
+        }
 
         snapshot_metrics = _derive_snapshot_metrics(
             instagram_account=instagram_account,
@@ -395,7 +543,10 @@ def load_account_data_from_zernio_with_fallback():
             'posts': posts,
             'comments': comments,
             'follower_history': follower_history,
-            'best_time_to_post': best_time_to_post
+            'best_time_to_post': best_time_to_post,
+            'posting_frequency': posting_frequency,
+            'content_decay': content_decay,
+            'demographics': demographics
         }
         
     except AuthError as e:

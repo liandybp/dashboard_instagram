@@ -51,6 +51,12 @@ def load_account_data() -> dict:
         "comments": [],
         "follower_history": [],
         "best_time_to_post": [],
+        "posting_frequency": [],
+        "content_decay": [],
+        "demographics": {
+            "instagram": {"age": [], "gender": [], "country": [], "city": []},
+            "youtube": {"age": [], "gender": [], "country": []},
+        },
     }
 
 
