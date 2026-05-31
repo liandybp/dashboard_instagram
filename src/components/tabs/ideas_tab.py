@@ -29,8 +29,11 @@ class IdeasTab(BaseTab):
                         from src.components.ideas import generate_all_ideas_yt
                         ideas_list = generate_all_ideas_yt()
 
-                    st.success("Ideas generadas con éxito!")
                     st.session_state["generated_ideas"] = ideas_list
+                    if ideas_list:
+                        st.success(f"Ideas generadas con exito: {len(ideas_list)}")
+                    else:
+                        st.warning("No se generaron ideas en esta ejecucion. Intenta refrescar y volver a generar.")
                 except Exception as e:
                     st.error(f"Error al generar ideas: {str(e)}")
 
@@ -39,6 +42,9 @@ class IdeasTab(BaseTab):
             return
 
         ideas_data = st.session_state["generated_ideas"]
+        if not ideas_data:
+            st.info("Aun no hay ideas para mostrar. Pulsa generar de nuevo.")
+            return
 
         # Agrupar por bucket
         ideas_by_bucket: dict = {}
