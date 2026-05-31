@@ -1,0 +1,13 @@
+ZERNIO_API_KEY=sk_932ec4b2cbb1096f8f6c89f0cadacd1c963dbb820bcd2ee375762977647c10d0
+ZERNIO_BASE_URL=https://zernio.com/api/v1
+ZERNIO_ACCOUNT_ID=6a1b0a672b2567671a73b03f
+ZERNIO_ACCOUNT_ID_YOUTUBE=actual_youtube_account_id
+ANTHROPIC_API_KEY=your_anthropic_api_key_here
+DASHBOARD_TZ=Europe/Madrid
+
+# Modelo local (llama-swap)
+LOCAL_LLM_ENDPOINT=http://localhost:8080/v1/chat/completions
+LOCAL_LLM_MODEL=qwen3.6_content_creator
+LOCAL_LLM_MAX_TOKENS=4096
+LOCAL_LLM_TEMPERATURE=0.95
+LOCAL_LLM_ENABLED=true

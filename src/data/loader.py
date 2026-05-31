@@ -15,6 +15,41 @@ except ImportError as e:
     print(f"Error importing Zernio client: {e}")
     sys.exit(1)
 
+
+def _build_fallback_data(reason: str = ""):
+    """Return a safe data payload compatible with all dashboard tabs."""
+    now = datetime.now().isoformat()
+    if reason:
+        print(f"Using fallback data: {reason}")
+
+    return {
+        "account_snapshot": {
+            "id": "fallback_instagram_account",
+            "platform": "instagram",
+            "username": "demo_instagram",
+            # Keep both keys for backward compatibility across tabs.
+            "follower_count": 0,
+            "followers_count": 0,
+            "posts_count": 0,
+            "engagement_rate": 0.0,
+            "reach": 0,
+            "profile_image": "",
+            "updated_at": now,
+        },
+        "account_health": {
+            "id": "fallback_instagram_account",
+            "platform": "instagram",
+            "status": "unknown",
+            "checked_at": now,
+            "message": "Datos de fallback cargados",
+        },
+        "daily_metrics": [],
+        "posts": [],
+        "comments": [],
+        "follower_history": [],
+        "best_time_to_post": [],
+    }
+
 def load_account_data_from_zernio_with_fallback():
     """Load account data from Zernio API using the official client with fallback to mock data."""
     
@@ -26,7 +61,7 @@ def load_account_data_from_zernio_with_fallback():
         accounts_result = client.list_accounts()
         if not accounts_result or 'accounts' not in accounts_result:
             print("No accounts found")
-            return None
+            return _build_fallback_data("No accounts in API response")
             
         # Find Instagram account
         instagram_account = None
@@ -37,7 +72,7 @@ def load_account_data_from_zernio_with_fallback():
                 
         if not instagram_account:
             print("No Instagram account found")
-            return None
+            return _build_fallback_data("No Instagram account available")
             
         account_id = instagram_account['_id']
         
@@ -141,12 +176,12 @@ def load_account_data_from_zernio_with_fallback():
         
     except AuthError as e:
         print(f"Authentication error: {e}")
-        return None
+        return _build_fallback_data("Authentication error")
     except Exception as e:
         print(f"Error loading data from Zernio: {e}")
         import traceback
         traceback.print_exc()
-        return None
+        return _build_fallback_data("Unhandled exception while loading data")
 
 if __name__ == "__main__":
     # Test the function
