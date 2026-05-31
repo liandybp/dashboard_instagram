@@ -245,6 +245,14 @@ class ZernioClient:
             params["accountId"] = account_id
         return self._request("GET", "/inbox/conversations", params=params)
 
+    def get_follower_history(self, account_id=None, platform="instagram"):
+        """GET /v1/accounts/follower-history"""
+        account_id = account_id or self.account_id_instagram
+        params = {"platform": platform}
+        if account_id:
+            params["accountId"] = account_id
+        return self._request("GET", "/accounts/follower-history", params=params)
+
 
     def validate_all_endpoints(self):
         """Valida todos los endpoints y reporta cuáles funcionan."""

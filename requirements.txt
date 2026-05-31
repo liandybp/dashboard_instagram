@@ -4,4 +4,4 @@ requests==2.32.3
 anthropic==0.97.0
 httpx==0.28.1
 python-dotenv==1.0.1
-pandas
+pandas==2.2.3

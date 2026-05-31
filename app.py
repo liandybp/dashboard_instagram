@@ -9,6 +9,7 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
+import json
 
 import os
 import sys
@@ -19,6 +20,7 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 # Import our modules
 from src.data.loader import load_account_data_from_zernio_with_fallback
 from src.components.idea_filters import filter_spam_comments
+from cache import read_account_health_dict, read_follower_history_list
 
 # Load environment variables
 from dotenv import load_dotenv
@@ -88,34 +90,120 @@ with tab1:
     else:
         st.info("No hay datos de métricas disponibles")
 
-# Tab 2 - Health
-    with tab2:
-        st.subheader("🔍 Health de la Cuenta")
-        
-        # Get account health data
-        account_health = data["account_health"]
-        if account_health:
-            health = account_health
-            
-            # Create 3-column layout for health metrics
-            col1, col2, col3 = st.columns(3)
-            
-            with col1:
-                st.metric("Estado", f"{health.get('status', 'unknown')}")
-                
-            with col2:
-                st.metric("ID Cuenta", f"{health.get('id', '')}")
-                
-            with col3:
-                st.metric("Plataforma", f"{health.get('platform', '')}")
-            
-            # Show health details
-            st.subheader("Detalles de Salud")
-            for key, value in health.items():
-                if key not in ['id', 'platform', 'status']:
-                    st.write(f"**{key}**: {value}")
+# Tab 2 - Health (Salud de Cuenta)
+with tab2:
+    st.subheader("🩺 Salud de Cuenta")
+    
+    # Get account health data
+    account_id = data["account_snapshot"]["id"]
+    platform_selected = "instagram"  # Para este dashboard solo usamos Instagram
+    
+    # Read health data from database
+    health = read_account_health_dict(account_id, platform_selected)
+    
+    if not health:
+        st.info("Sin datos de salud. Haz clic en 'Refrescar datos' para verificar.")
+    else:
+        # --- Bloque 1: Indicadores booleanos en columnas ---
+        col1, col2, col3, col4 = st.columns(4)
+
+        with col1:
+            icon = "🟢" if health["token_valid"] else "🔴"
+            st.metric("Token OAuth", f"{icon} {'Válido' if health['token_valid'] else 'Expirado'}")
+
+        with col2:
+            icon = "🟢" if health["is_active"] else "🔴"
+            st.metric("Cuenta activa", f"{icon} {'Sí' if health['is_active'] else 'No'}")
+
+        with col3:
+            icon = "✅" if health["is_verified"] else "—"
+            st.metric("Verificada", f"{icon} {'Sí' if health['is_verified'] else 'No'}")
+
+        with col4:
+            icon = "⚠️" if health["is_restricted"] else "🟢"
+            label = "Restringida" if health["is_restricted"] else "Sin restricciones"
+            st.metric("Restricciones", f"{icon} {label}")
+
+        # --- Bloque 2: Permisos (scopes) ---
+        st.divider()
+        st.subheader("Permisos de la integración")
+
+        if health["scopes_ok"]:
+            st.success("✅ Todos los permisos necesarios están activos.")
         else:
-            st.info("No hay datos de salud disponibles")
+            missing = json.loads(health["missing_scopes"] or "[]")
+            st.error(f"❌ Faltan {len(missing)} permiso(s): {', '.join(missing)}")
+            st.caption("Reconecta tu cuenta en zernio.com para restaurar los permisos.")
+
+        # --- Bloque 3: Problemas y recomendaciones ---
+        issues = json.loads(health["issues"] or "[]")
+        recommendations = json.loads(health["recommendations"] or "[]")
+
+        if issues:
+            st.divider()
+            st.subheader("⚠️ Problemas detectados")
+            for issue in issues:
+                st.warning(issue)
+
+        if recommendations:
+            st.subheader("💡 Recomendaciones")
+            for rec in recommendations:
+                st.info(rec)
+
+        if not issues and not recommendations:
+            st.divider()
+            st.success("Todo en orden. No hay problemas ni recomendaciones pendientes.")
+
+        # --- Bloque 4: Dinámica de seguidores ---
+        st.divider()
+        st.subheader("Dinámica de seguidores (últimos 90 días)")
+
+        follower_data = read_follower_history_list(platform_selected, days=90)
+
+        if not follower_data:
+            st.info("Sin historial de seguidores. Refresca para cargar datos.")
+        else:
+            df = pd.DataFrame(follower_data)
+
+            # Gráfico de línea: total de seguidores
+            fig_total = px.line(
+                df, x="date", y="followers",
+                title="Total de seguidores por día",
+                labels={"date": "Fecha", "followers": "Seguidores"},
+                color_discrete_sequence=["#E1306C"]  # Rosa Instagram
+            )
+            fig_total.update_layout(hovermode="x unified")
+            st.plotly_chart(fig_total, use_container_width=True)
+
+            # Gráfico de barras apiladas: ganados vs perdidos
+            if "followers_gained" in df.columns and df["followers_gained"].sum() > 0:
+                fig_delta = go.Figure()
+                fig_delta.add_trace(go.Bar(
+                    x=df["date"], y=df["followers_gained"],
+                    name="Ganados", marker_color="#4CAF50"
+                ))
+                fig_delta.add_trace(go.Bar(
+                    x=df["date"], y=[-v for v in df["followers_lost"]],
+                    name="Perdidos", marker_color="#F44336"
+                ))
+                fig_delta.update_layout(
+                    title="Seguidores ganados y perdidos por día",
+                    barmode="relative",
+                    hovermode="x unified",
+                    yaxis_title="Seguidores",
+                    xaxis_title="Fecha"
+                )
+                st.plotly_chart(fig_delta, use_container_width=True)
+                st.caption(
+                    "ℹ️ Meta eliminó el historial de ganados/perdidos de su API nativa. "
+                    "Zernio reconstruye esta métrica mediante capturas diarias."
+                )
+            else:
+                st.caption("Los datos de seguidores ganados/perdidos estarán disponibles "
+                        "tras varios días de capturas consecutivas.")
+
+            # Última actualización
+            st.caption(f"Última verificación: {health['checked_at'][:16].replace('T', ' ')} UTC")
 
 # Tab 3 - Audience
 with tab3:

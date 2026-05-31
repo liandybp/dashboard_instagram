@@ -46,9 +46,30 @@ def init_db():
             platform TEXT,
             status TEXT,
             checked_at TEXT,
+            token_valid INTEGER,
+            is_active INTEGER,
+            is_verified INTEGER,
+            is_restricted INTEGER,
+            scopes_ok INTEGER,
+            missing_scopes TEXT,
+            issues TEXT,
+            recommendations TEXT,
             PRIMARY KEY (id, platform)
         )
     ''')
+    
+    # Ensure all columns exist (migration for existing tables)
+    migrate_column('account_health', 'token_valid', 'INTEGER')
+    migrate_column('account_health', 'is_active', 'INTEGER')
+    migrate_column('account_health', 'is_verified', 'INTEGER')
+    migrate_column('account_health', 'is_restricted', 'INTEGER')
+    migrate_column('account_health', 'scopes_ok', 'INTEGER')
+    migrate_column('account_health', 'missing_scopes', 'TEXT')
+    migrate_column('account_health', 'issues', 'TEXT')
+    migrate_column('account_health', 'recommendations', 'TEXT')
+    
+    conn.commit()
+    conn.close()
     
     # Create daily_metrics table
     cursor.execute('''
@@ -129,6 +150,8 @@ def init_db():
             date TEXT,
             platform TEXT,
             followers INTEGER,
+            followers_gained INTEGER DEFAULT 0,
+            followers_lost INTEGER DEFAULT 0,
             PRIMARY KEY (date, platform)
         )
     ''')
@@ -237,22 +260,27 @@ def init_db():
 
 def migrate_column(table_name, column_name, column_type):
     """Migrate a column to a table if it doesn't exist."""
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-    
-    # Check if column exists
-    cursor.execute(f"PRAGMA table_info({table_name})")
-    columns = cursor.fetchall()
-    
-    # Extract column names from the result
-    existing_columns = [col[1] for col in columns]
-    
-    # Only add column if it doesn't exist
-    if column_name not in existing_columns:
-        cursor.execute(f"ALTER TABLE {table_name} ADD COLUMN {column_name} {column_type}")
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
         
-    conn.commit()
-    conn.close()
+        # Check if column exists
+        cursor.execute(f"PRAGMA table_info({table_name})")
+        columns = cursor.fetchall()
+        
+        # Extract column names from the result
+        existing_columns = [col[1] for col in columns]
+        
+        # Only add column if it doesn't exist
+        if column_name not in existing_columns:
+            cursor.execute(f"ALTER TABLE {table_name} ADD COLUMN {column_name} {column_type}")
+            
+        conn.commit()
+    except Exception as e:
+        print(f"Error en migración de columna {column_name}: {e}")
+    finally:
+        if 'conn' in locals():
+            conn.close()
 
 def backup_data(table_name):
     """Backup data from a table before massive delete operations."""
@@ -356,13 +384,23 @@ def write_account_health(account_data):
     cursor = conn.cursor()
     cursor.execute('''
         INSERT OR REPLACE INTO account_health 
-        (id, platform, status, checked_at)
-        VALUES (?, ?, ?, ?)
+        (id, platform, status, checked_at,
+         token_valid, is_active, is_verified, is_restricted, scopes_ok,
+         missing_scopes, issues, recommendations)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ''', (
         account_data['id'],
         account_data['platform'],
         account_data['status'],
-        account_data['checked_at']
+        account_data['checked_at'],
+        int(account_data.get('tokenValid', False)),
+        int(account_data.get('isActive', False)),
+        int(account_data.get('isVerified', False)),
+        int(account_data.get('isRestricted', False)),
+        int(account_data.get('scopesOk', True)),
+        json.dumps(account_data.get('missingScopes', [])),
+        json.dumps(account_data.get('issues', [])),
+        json.dumps(account_data.get('recommendations', [])),
     ))
     conn.commit()
     conn.close()
@@ -374,10 +412,30 @@ def read_account_health(account_id, platform):
     cursor.execute('''
         SELECT * FROM account_health 
         WHERE id = ? AND platform = ?
+        ORDER BY checked_at DESC
+        LIMIT 1
     ''', (account_id, platform))
     result = cursor.fetchone()
     conn.close()
     return result
+
+def read_account_health_dict(account_id, platform):
+    """Read account health data as dictionary."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute('''
+        SELECT * FROM account_health 
+        WHERE id = ? AND platform = ?
+        ORDER BY checked_at DESC
+        LIMIT 1
+    ''', (account_id, platform))
+    row = cursor.fetchone()
+    conn.close()
+    if row:
+        # Convert to dictionary with column names as keys
+        columns = [description[0] for description in cursor.description]
+        return dict(zip(columns, row))
+    return None
 
 def write_daily_metrics(metrics_data):
     """Write daily metrics data."""
@@ -547,12 +605,14 @@ def write_follower_history(follower_data):
     cursor = conn.cursor()
     cursor.execute('''
         INSERT OR REPLACE INTO follower_history 
-        (date, platform, followers)
-        VALUES (?, ?, ?)
+        (date, platform, followers, followers_gained, followers_lost)
+        VALUES (?, ?, ?, ?, ?)
     ''', (
         follower_data['date'],
         follower_data['platform'],
-        follower_data['followers']
+        follower_data['followers'],
+        follower_data.get('followers_gained', 0),
+        follower_data.get('followers_lost', 0)
     ))
     conn.commit()
     conn.close()
@@ -568,6 +628,31 @@ def read_follower_history(date, platform):
     result = cursor.fetchone()
     conn.close()
     return result
+
+def read_follower_history_list(platform, days=90):
+    """
+    Devuelve serie temporal de seguidores con dinámica diaria.
+    Ordenado cronológicamente, últimos N días.
+    """
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    # Calculate cutoff date
+    from datetime import datetime, timedelta
+    cutoff = (datetime.utcnow() - timedelta(days=days)).date().isoformat()
+    
+    cursor.execute('''
+        SELECT date, followers, followers_gained, followers_lost
+        FROM follower_history
+        WHERE platform = ? AND date >= ?
+        ORDER BY date ASC
+    ''', (platform, cutoff))
+    
+    rows = cursor.fetchall()
+    conn.close()
+    
+    # Convert to list of dictionaries
+    return [dict(zip(['date', 'followers', 'followers_gained', 'followers_lost'], row)) for row in rows]
 
 def write_refresh_log(log_data):
     """Write refresh log data."""
