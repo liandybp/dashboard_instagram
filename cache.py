@@ -68,9 +68,6 @@ def init_db():
     migrate_column('account_health', 'issues', 'TEXT')
     migrate_column('account_health', 'recommendations', 'TEXT')
     
-    conn.commit()
-    conn.close()
-    
     # Create daily_metrics table
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS daily_metrics (

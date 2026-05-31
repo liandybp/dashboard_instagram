@@ -20,6 +20,7 @@ st.set_page_config(
 )
 
 from src.data.loader import load_account_data_from_zernio_with_fallback
+from cache import init_db
 from src.components.tabs import (
     MetricsTab,
     HealthTab,
@@ -48,11 +49,37 @@ def load_account_data() -> dict:
     }
 
 
+def _trigger_refresh() -> None:
+    """Fuerza recarga de datos invalidando caché y relanzando la app."""
+    load_account_data.clear()
+    st.cache_data.clear()
+    st.rerun()
+
+
+def _last_sync_text(data: dict) -> str:
+    checked_at = data.get("account_health", {}).get("checked_at")
+    updated_at = data.get("account_snapshot", {}).get("updated_at")
+    stamp = checked_at or updated_at
+    if not stamp:
+        return "Sin sincronización registrada"
+    return f"Última sincronización: {str(stamp)[:16].replace('T', ' ')}"
+
+
 def main() -> None:
+    # Asegura tablas SQLite requeridas por pestañas que leen caché.
+    init_db()
+
     # Cargar datos
     data = load_account_data()
 
     st.title("📊 Dashboard de Instagram")
+
+    control_col, status_col = st.columns([1, 3])
+    with control_col:
+        if st.button("🔄 Refrescar datos", use_container_width=True):
+            _trigger_refresh()
+    with status_col:
+        st.caption(_last_sync_text(data))
 
     # Instanciar las pestañas (POO)
     tab_objects = [

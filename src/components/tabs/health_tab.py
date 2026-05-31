@@ -1,6 +1,7 @@
 """Tab 2 - Salud de Cuenta."""
 
 import json
+from datetime import datetime
 
 import pandas as pd
 import plotly.express as px
@@ -21,50 +22,71 @@ class HealthTab(BaseTab):
     def render(self) -> None:
         st.subheader("🩺 Salud de Cuenta")
 
+        def _parse_json_list(value):
+            if isinstance(value, list):
+                return value
+            if isinstance(value, str):
+                try:
+                    parsed = json.loads(value or "[]")
+                    return parsed if isinstance(parsed, list) else []
+                except Exception:
+                    return []
+            return []
+
         account_id = self.data.get("account_snapshot", {}).get("id")
         platform = "instagram"
+        health = None
 
         try:
             health = read_account_health_dict(account_id, platform)
         except Exception as e:
             st.warning(f"No se pudo leer salud de cuenta desde caché: {e}")
-            return
+
+        # Fallback: usar payload cargado desde API en esta misma ejecución.
+        if not health:
+            health = self.data.get("account_health")
 
         if not health:
             st.info("Sin datos de salud. Haz clic en 'Refrescar datos' para verificar.")
             return
 
+        token_valid = bool(health.get("token_valid", health.get("tokenValid", True)))
+        is_active = bool(health.get("is_active", health.get("isActive", True)))
+        is_verified = bool(health.get("is_verified", health.get("isVerified", False)))
+        is_restricted = bool(health.get("is_restricted", health.get("isRestricted", False)))
+        scopes_ok = bool(health.get("scopes_ok", health.get("scopesOk", True)))
+
         # --- Bloque 1: Indicadores booleanos ---
         col1, col2, col3, col4 = st.columns(4)
 
         with col1:
-            icon = "🟢" if health["token_valid"] else "🔴"
-            st.metric("Token OAuth", f"{icon} {'Válido' if health['token_valid'] else 'Expirado'}")
+            icon = "🟢" if token_valid else "🔴"
+            st.metric("Token OAuth", f"{icon} {'Válido' if token_valid else 'Expirado'}")
         with col2:
-            icon = "🟢" if health["is_active"] else "🔴"
-            st.metric("Cuenta activa", f"{icon} {'Sí' if health['is_active'] else 'No'}")
+            icon = "🟢" if is_active else "🔴"
+            st.metric("Cuenta activa", f"{icon} {'Sí' if is_active else 'No'}")
         with col3:
-            icon = "✅" if health["is_verified"] else "—"
-            st.metric("Verificada", f"{icon} {'Sí' if health['is_verified'] else 'No'}")
+            icon = "✅" if is_verified else "—"
+            st.metric("Verificada", f"{icon} {'Sí' if is_verified else 'No'}")
         with col4:
-            icon = "⚠️" if health["is_restricted"] else "🟢"
-            label = "Restringida" if health["is_restricted"] else "Sin restricciones"
+            icon = "⚠️" if is_restricted else "🟢"
+            label = "Restringida" if is_restricted else "Sin restricciones"
             st.metric("Restricciones", f"{icon} {label}")
 
         # --- Bloque 2: Permisos ---
         st.divider()
         st.subheader("Permisos de la integración")
 
-        if health["scopes_ok"]:
+        if scopes_ok:
             st.success("✅ Todos los permisos necesarios están activos.")
         else:
-            missing = json.loads(health["missing_scopes"] or "[]")
+            missing = _parse_json_list(health.get("missing_scopes", health.get("missingScopes", [])))
             st.error(f"❌ Faltan {len(missing)} permiso(s): {', '.join(missing)}")
             st.caption("Reconecta tu cuenta en zernio.com para restaurar los permisos.")
 
         # --- Bloque 3: Problemas y recomendaciones ---
-        issues = json.loads(health["issues"] or "[]")
-        recommendations = json.loads(health["recommendations"] or "[]")
+        issues = _parse_json_list(health.get("issues", []))
+        recommendations = _parse_json_list(health.get("recommendations", []))
 
         if issues:
             st.divider()
@@ -89,7 +111,10 @@ class HealthTab(BaseTab):
             follower_data = read_follower_history_list(platform, days=90)
         except Exception as e:
             st.warning(f"No se pudo leer historial de seguidores: {e}")
-            return
+            follower_data = []
+
+        if not follower_data:
+            follower_data = self.data.get("follower_history", [])
 
         if not follower_data:
             st.info("Sin historial de seguidores. Refresca para cargar datos.")
@@ -132,5 +157,6 @@ class HealthTab(BaseTab):
             st.caption("Los datos de seguidores ganados/perdidos estarán disponibles "
                        "tras varios días de capturas consecutivas.")
 
-        st.caption(f"Última verificación: {health['checked_at'][:16].replace('T', ' ')} UTC")
+        checked_at = str(health.get("checked_at", datetime.now().isoformat()))
+        st.caption(f"Última verificación: {checked_at[:16].replace('T', ' ')} UTC")
 

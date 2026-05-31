@@ -4,6 +4,7 @@ import os
 import sys
 from datetime import datetime
 from dotenv import load_dotenv
+from cache import write_account_health
 
 # Load environment variables
 load_dotenv(override=True)
@@ -50,6 +51,65 @@ def _build_fallback_data(reason: str = ""):
         "best_time_to_post": [],
     }
 
+
+def _extract_list(payload: dict, keys: list):
+    """Extract a list from a payload trying multiple common key names."""
+    if not isinstance(payload, dict):
+        return []
+    for key in keys:
+        value = payload.get(key)
+        if isinstance(value, list):
+            return value
+    return []
+
+
+def _normalize_health_data(raw_health: dict, account_id: str, platform: str):
+    """Normalize health payload so UI and cache can read a stable shape."""
+    now = datetime.now().isoformat()
+    raw = raw_health if isinstance(raw_health, dict) else {}
+
+    token_valid = bool(raw.get("token_valid", raw.get("tokenValid", True)))
+    is_active = bool(raw.get("is_active", raw.get("isActive", True)))
+    is_verified = bool(raw.get("is_verified", raw.get("isVerified", False)))
+    is_restricted = bool(raw.get("is_restricted", raw.get("isRestricted", False)))
+    scopes_ok = bool(raw.get("scopes_ok", raw.get("scopesOk", True)))
+
+    missing_scopes = raw.get("missing_scopes", raw.get("missingScopes", [])) or []
+    issues = raw.get("issues", []) or []
+    recommendations = raw.get("recommendations", []) or []
+
+    ui_health = {
+        "id": account_id,
+        "platform": platform,
+        "status": raw.get("health_status", raw.get("status", "unknown")),
+        "checked_at": raw.get("checked_at", now),
+        "token_valid": token_valid,
+        "is_active": is_active,
+        "is_verified": is_verified,
+        "is_restricted": is_restricted,
+        "scopes_ok": scopes_ok,
+        "missing_scopes": missing_scopes,
+        "issues": issues,
+        "recommendations": recommendations,
+    }
+
+    db_health = {
+        "id": account_id,
+        "platform": platform,
+        "status": ui_health["status"],
+        "checked_at": ui_health["checked_at"],
+        "tokenValid": token_valid,
+        "isActive": is_active,
+        "isVerified": is_verified,
+        "isRestricted": is_restricted,
+        "scopesOk": scopes_ok,
+        "missingScopes": missing_scopes,
+        "issues": issues,
+        "recommendations": recommendations,
+    }
+
+    return ui_health, db_health
+
 def load_account_data_from_zernio_with_fallback():
     """Load account data from Zernio API using the official client with fallback to mock data."""
     
@@ -74,12 +134,14 @@ def load_account_data_from_zernio_with_fallback():
             print("No Instagram account found")
             return _build_fallback_data("No Instagram account available")
             
-        account_id = instagram_account['_id']
+        account_id = instagram_account.get('_id') or instagram_account.get('id')
+        if not account_id:
+            return _build_fallback_data("Instagram account without id")
         
         # Load account health (this is what we use for account snapshot)
         # Use the correct Instagram account insights endpoint
         try:
-            health_result = client.get_instagram_account_insights(account_id)
+            health_result = client.get_instagram_account_insights(account_id=account_id)
         except AddonRequiredError as e:
             print(f"Addon required for health data: {e}")
             health_result = {}
@@ -89,7 +151,7 @@ def load_account_data_from_zernio_with_fallback():
             
         # Load daily analytics (this is what we use for daily metrics)
         try:
-            daily_result = client.get_daily_metrics(account_id)
+            daily_result = client.get_daily_metrics(platform="instagram", account_id=account_id)
         except AddonRequiredError as e:
             print(f"Addon required for daily analytics: {e}")
             daily_result = {"metrics": []}
@@ -99,7 +161,7 @@ def load_account_data_from_zernio_with_fallback():
             
         # Load follower stats (this is what we use for follower history)
         try:
-            follower_result = client.get_follower_stats(account_id)
+            follower_result = client.get_follower_stats(account_id=account_id, platform="instagram")
         except AddonRequiredError as e:
             print(f"Addon required for follower stats: {e}")
             follower_result = {"history": []}
@@ -109,7 +171,7 @@ def load_account_data_from_zernio_with_fallback():
             
         # Load best time to post
         try:
-            best_time_result = client.get_best_time_to_post(account_id)
+            best_time_result = client.get_best_time_to_post(platform="instagram", account_id=account_id)
         except AddonRequiredError as e:
             print(f"Addon required for best time data: {e}")
             best_time_result = {"best_time": []}
@@ -119,7 +181,7 @@ def load_account_data_from_zernio_with_fallback():
             
         # Load comments (this is what we use for comments)
         try:
-            comments_result = client.list_inbox_comments(account_id)
+            comments_result = client.list_inbox_comments(account_id=account_id, platform="instagram")
         except AddonRequiredError as e:
             print(f"Addon required for comments: {e}")
             comments_result = {"comments": []}
@@ -129,7 +191,7 @@ def load_account_data_from_zernio_with_fallback():
             
         # Load posts (this is what we use for posts)
         try:
-            posts_result = client.get_analytics(account_id)
+            posts_result = client.get_analytics(platform="instagram", account_id=account_id)
         except AddonRequiredError as e:
             print(f"Addon required for posts: {e}")
             posts_result = {"posts": []}
@@ -137,41 +199,47 @@ def load_account_data_from_zernio_with_fallback():
             print(f"Error getting posts: {e}")
             posts_result = {"posts": []}
             
-        # Prepare the data structure to match what app.py expects
-        # Handle case where account insights are not available due to missing add-ons
-        if isinstance(health_result, dict) and 'error' in health_result:
-            # If we got an error from the API (like addon required), create mock data
-            account_health_data = {
-                "id": account_id,
-                "platform": instagram_account['platform'],
-                "status": "unknown",
-                "checked_at": datetime.now().isoformat(),
-                "message": "Datos de salud no disponibles (requiere Analytics add-on)"
-            }
-        else:
-            # Use actual data from API
-            account_health_data = {
-                "id": account_id,
-                "platform": instagram_account['platform'],
-                "status": health_result.get('health_status', 'unknown'),
-                "checked_at": datetime.now().isoformat()
-            }
+        platform = instagram_account.get('platform', 'instagram')
+        account_health_data, db_health_data = _normalize_health_data(health_result, account_id, platform)
+        try:
+            write_account_health(db_health_data)
+        except Exception as e:
+            print(f"Warning: failed to persist account health in cache: {e}")
+
+        daily_metrics = _extract_list(daily_result, ["metrics", "dailyMetrics", "data", "rows"])
+        posts = _extract_list(posts_result, ["posts", "data", "items", "analytics"])
+        comments = _extract_list(comments_result, ["comments", "data", "items"])
+        follower_history = _extract_list(follower_result, ["history", "data", "rows"])
+        best_time_to_post = _extract_list(best_time_result, ["best_time", "bestTime", "slots", "data"])
+
+        followers = (
+            (health_result or {}).get("followers")
+            or (health_result or {}).get("followers_count")
+            or (health_result or {}).get("follower_count")
+            or instagram_account.get("followers_count")
+            or instagram_account.get("follower_count")
+            or 0
+        )
             
         return {
             'account_snapshot': {
                 "id": account_id,
-                "platform": instagram_account['platform'],
+                "platform": platform,
                 "username": instagram_account.get('username', ''),
-                "follower_count": health_result.get('followers', 0),
-                "profile_image": health_result.get('profile_pic_url', ''),
+                "follower_count": followers,
+                "followers_count": followers,
+                "posts_count": len(posts),
+                "engagement_rate": 0.0,
+                "reach": 0,
+                "profile_image": (health_result or {}).get('profile_pic_url', ''),
                 "updated_at": datetime.now().isoformat()
             },
             'account_health': account_health_data,
-            'daily_metrics': daily_result.get('metrics', []),
-            'posts': posts_result.get('posts', []),
-            'comments': comments_result.get('comments', []),
-            'follower_history': follower_result.get('history', []),
-            'best_time_to_post': best_time_result.get('best_time', [])
+            'daily_metrics': daily_metrics,
+            'posts': posts,
+            'comments': comments,
+            'follower_history': follower_history,
+            'best_time_to_post': best_time_to_post
         }
         
     except AuthError as e:
