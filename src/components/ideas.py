@@ -1,10 +1,13 @@
 import os
 import sys
 import uuid
+from pathlib import Path
 from dotenv import load_dotenv
 
 # Load environment variables
-load_dotenv(override=True)
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+load_dotenv(PROJECT_ROOT / "env", override=True)
+load_dotenv(PROJECT_ROOT / ".env", override=True)
 
 try:
     from src.api.client import ZernioClient

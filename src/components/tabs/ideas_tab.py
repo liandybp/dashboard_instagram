@@ -19,7 +19,7 @@ class IdeasTab(BaseTab):
 
         platform = st.radio("Plataforma:", ["Instagram", "YouTube"], horizontal=True)
 
-        if st.button(f"Generar todas las ideas de {platform}"):
+        if st.button("Generar ideas"):
             with st.spinner(f"Generando ideas para {platform.lower()}..."):
                 try:
                     if platform == "Instagram":
@@ -38,7 +38,7 @@ class IdeasTab(BaseTab):
                     st.error(f"Error al generar ideas: {str(e)}")
 
         if "generated_ideas" not in st.session_state:
-            st.info("Haz clic en 'Generar todas las ideas' para comenzar.")
+            st.info("Haz clic en 'Generar ideas' para comenzar.")
             return
 
         ideas_data = st.session_state["generated_ideas"]

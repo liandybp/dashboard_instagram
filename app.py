@@ -2,7 +2,11 @@
 
 # Cargar variables de entorno antes que cualquier otra cosa
 from dotenv import load_dotenv
-load_dotenv(override=True)
+from pathlib import Path
+
+BASE_DIR = Path(__file__).resolve().parent
+load_dotenv(BASE_DIR / "env", override=True)
+load_dotenv(BASE_DIR / ".env", override=True)
 
 import os
 import sys
@@ -21,6 +25,7 @@ st.set_page_config(
 
 from src.data.loader import load_account_data_from_zernio_with_fallback
 from cache import init_db
+from src.components.theme import apply_brand_theme
 from src.components.tabs import (
     MetricsTab,
     HealthTab,
@@ -56,6 +61,13 @@ def _trigger_refresh() -> None:
     st.rerun()
 
 
+def _toggle_theme_mode() -> None:
+    """Alterna entre modo claro y oscuro."""
+    current = st.session_state.get("theme_mode", "light")
+    st.session_state["theme_mode"] = "dark" if current == "light" else "light"
+    st.rerun()
+
+
 def _last_sync_text(data: dict) -> str:
     checked_at = data.get("account_health", {}).get("checked_at")
     updated_at = data.get("account_snapshot", {}).get("updated_at")
@@ -69,17 +81,29 @@ def main() -> None:
     # Asegura tablas SQLite requeridas por pestañas que leen caché.
     init_db()
 
+    if "theme_mode" not in st.session_state:
+        st.session_state["theme_mode"] = "light"
+
+    theme_mode = st.session_state["theme_mode"]
+
+    # Aplicar branding global (fuente + paleta).
+    apply_brand_theme(theme_mode)
+
     # Cargar datos
     data = load_account_data()
 
-    st.title("📊 Dashboard de Instagram")
-
-    control_col, status_col = st.columns([1, 3])
-    with control_col:
-        if st.button("🔄 Refrescar datos", use_container_width=True):
+    title_col, refresh_col, theme_col = st.columns([11.8, 0.3, 0.3], gap="small")
+    with title_col:
+        st.title("📊 Dashboard de Instagram")
+    with refresh_col:
+        if st.button("🔄", help="Refrescar datos", use_container_width=True):
             _trigger_refresh()
-    with status_col:
-        st.caption(_last_sync_text(data))
+    with theme_col:
+        theme_button_label = "🌙" if theme_mode == "light" else "☀️"
+        if st.button(theme_button_label, help="Cambiar entre tema claro y oscuro", use_container_width=True):
+            _toggle_theme_mode()
+
+    st.caption(_last_sync_text(data))
 
     # Instanciar las pestañas (POO)
     tab_objects = [

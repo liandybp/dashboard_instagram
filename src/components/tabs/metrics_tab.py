@@ -23,21 +23,33 @@ class MetricsTab(BaseTab):
             return
 
         snapshot = account_snapshot
+        followers = snapshot.get("followers_count", snapshot.get("follower_count", 0))
+        posts_count = snapshot.get("posts_count", 0)
+        engagement_rate = snapshot.get("engagement_rate", snapshot.get("engagementRate", 0))
+        reach = snapshot.get("reach", 0)
+
+        def _format_number(value):
+            return f"{int(value):,}" if value is not None else "No disponible"
+
+        def _format_percent(value):
+            return f"{float(value):.2f}%" if value is not None else "No disponible"
+
         col1, col2, col3, col4 = st.columns(4)
 
         with col1:
-            st.metric("Seguidores", f"{snapshot.get('followers_count', 0):,}")
+            st.metric("Seguidores", _format_number(followers))
         with col2:
-            st.metric("Publicaciones", f"{snapshot.get('posts_count', 0):,}")
+            st.metric("Publicaciones", _format_number(posts_count))
         with col3:
-            st.metric("Engagement Rate", f"{snapshot.get('engagement_rate', 0):.2f}%")
+            st.metric("Engagement Rate", _format_percent(engagement_rate))
         with col4:
-            st.metric("Reach", f"{snapshot.get('reach', 0):,}")
+            st.metric("Reach", _format_number(reach))
 
         daily_metrics = self.data.get("daily_metrics")
         if daily_metrics:
             df_daily = pd.DataFrame(daily_metrics)
-            df_daily["date"] = pd.to_datetime(df_daily["date"])
-            fig = px.line(df_daily, x="date", y="engagement_rate", title="Tendencia de Engagement")
-            st.plotly_chart(fig, use_container_width=True, key="metrics_engagement")
+            if "date" in df_daily.columns and "engagement_rate" in df_daily.columns:
+                df_daily["date"] = pd.to_datetime(df_daily["date"])
+                fig = px.line(df_daily, x="date", y="engagement_rate", title="Tendencia de Engagement")
+                st.plotly_chart(fig, use_container_width=True, key="metrics_engagement")
 

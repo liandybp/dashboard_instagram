@@ -6,9 +6,12 @@ Base URL real: https://zernio.com/api/v1  (NO api.zernio.com)
 import requests
 import time
 import os
+from pathlib import Path
 from dotenv import load_dotenv
 
-load_dotenv(override=True)
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+load_dotenv(PROJECT_ROOT / "env", override=True)
+load_dotenv(PROJECT_ROOT / ".env", override=True)
 
 
 class AuthError(Exception):
@@ -126,7 +129,7 @@ class ZernioClient:
 
     def get_daily_metrics(self, platform="instagram", account_id=None, from_date=None, to_date=None):
         """
-        GET /v1/analytics/daily-metrics
+        GET /v1/analytics/daily-metrics (con fallback a /analytics/daily)
         Métricas diarias agregadas: impressions, reach, likes, comments, shares, saves, clicks, views.
         Filtros: platform, profileId, accountId, fromDate, toDate
         """
@@ -138,7 +141,10 @@ class ZernioClient:
             params["fromDate"] = from_date
         if to_date:
             params["toDate"] = to_date
-        return self._request("GET", "/analytics/daily-metrics", params=params)
+        try:
+            return self._request("GET", "/analytics/daily-metrics", params=params)
+        except Exception:
+            return self._request("GET", "/analytics/daily", params=params)
 
     def get_best_time_to_post(self, platform="instagram", account_id=None):
         """

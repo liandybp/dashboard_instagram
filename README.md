@@ -7,6 +7,7 @@ Este proyecto es un dashboard interactivo para analizar métricas de Instagram u
 - Python 3.9+
 - Cuenta Zernio con add-ons activados
 - API key de Anthropic (claude-3-5-sonnet)
+- Archivo `env` en la raíz del proyecto con las credenciales de Zernio (o `.env` equivalente)
 
 ## Instalación
 
@@ -29,8 +30,7 @@ pip install streamlit pandas plotly python-dotenv anthropic httpx
 
 4. Configurar variables de entorno:
 ```bash
-cp .env.example .env
-# Editar .env con tus claves API
+# Editar el archivo `env` (o `.env`) con tus claves API
 ```
 
 ## Cómo ejecutar
@@ -41,6 +41,11 @@ streamlit run app.py --server.port=8501
 ```
 
 El dashboard estará disponible en http://localhost:8501
+
+### Controles principales
+
+- **🔄 Refrescar datos**: invalida la caché y vuelve a consultar la API.
+- **🌙 / ☀️**: alterna entre theme oscuro y claro.
 
 ## Refrescado de datos
 
